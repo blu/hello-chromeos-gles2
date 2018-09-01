@@ -1,0 +1,14 @@
+// workaround wrapper providing safe inclusion of cmath
+
+// in some gcc versions, -ffinite-math-only causes the inclusion of math-finite.h via math.h
+// the former header uses the optional macro '__extern_always_inline' without verifying its
+// presence. that macro is provided by sys/cdefs.h, but only for __GNUC_PREREQ (4,3), so here
+// we duplicate macro's definition found there for those gnu-compatible compilers not meeting
+// the prerequisite
+
+#if !defined(__extern_always_inline)
+	#define __extern_always_inline extern __always_inline
+#endif
+
+#include <cmath>
+
