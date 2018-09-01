@@ -73,12 +73,12 @@ The above:
 
 Please, note that:
 * Resizing at runtime, including switching to fullscreen, is not implemented yet.
-* There is currently no automatic selection of configs for EGL drawables, so one *has* to be specified on the command line via `-config_id` option. To list all available EGL configs execute the next line, then take note of field EGL_CONFIG_ID for the config of choice:
+* There is currently no automatic selection of configs for EGL drawables, so one *has* to be specified on the command line via `-config_id` option. To list all available EGL configs execute the next line, then take note of field `EGL_CONFIG_ID` for the config of choice:
 ```
 $ ./test_egl_xxx -frames 0 -bitness 8 8 8 8 -print_egl_configs
 ```
-* Only drawables of 32-bit pixel formats and EGL_SURFACE_TYPE of EGL_PBUFFER_BIT work currently; all other configs will result in garbled output or just fail to initialize.
-* Due to a deficiency in the current EGL/Wayland bridging, the frame loop is quite CPU-intensive. On bigLITTLE ARM machines one might want to pin the app on the big cores.
+* Only drawables of 32-bit pixel formats and `EGL_SURFACE_TYPE` of `EGL_PBUFFER_BIT` work currently; all other configs will result in garbled output or just fail to initialize.
+* Due to a deficiency in the current EGL/Wayland bridging, the frame loop is quite CPU-intensive. On bigLITTLE ARM machines one might want to pin the app to the big cores.
 * If you need to see libEGL diagnostics/debug messages, set the `EGL_LOG_LEVEL` envvar to `debug`.
 
 
