@@ -520,6 +520,14 @@ bool init_resources(
 	scoped_ptr< deinit_resources_t, scoped_functor > on_error(deinit_resources);
 
 	/////////////////////////////////////////////////////////////////
+	// set up various patches to the shaders
+
+	const std::string patch[] = {
+		"#if 1 // one-sided lighting",
+		"#if 0 // one-sided lighting"
+	};
+
+	/////////////////////////////////////////////////////////////////
 
 	glDisable(GL_CULL_FACE);
 	glEnable(GL_DEPTH_TEST);
@@ -530,7 +538,6 @@ bool init_resources(
 	const GLclampf alpha = 1.f;
 
 	glClearColor(red, green, blue, alpha);
-
 	glClearDepthf(1.f);
 
 	/////////////////////////////////////////////////////////////////
@@ -569,7 +576,9 @@ bool init_resources(
 	g_shader_frag[PROG_SKIN] = glCreateShader(GL_FRAGMENT_SHADER);
 	assert(g_shader_frag[PROG_SKIN]);
 
-	if (!util::setupShader(g_shader_frag[PROG_SKIN], "asset/shader/phong_bump_tang.glslf")) {
+	if (!util::setupShaderWithPatch(g_shader_frag[PROG_SKIN], "asset/shader/phong_bump_tang.glslf",
+			sizeof(patch) / sizeof(patch[0]) / 2, patch))
+	{
 		stream::cerr << __FUNCTION__ << " failed at setupShader\n";
 		return false;
 	}

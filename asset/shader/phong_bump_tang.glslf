@@ -67,9 +67,15 @@ void main()
 
 	vec3 bump = normalize(texture(normal_map, tcoord_i).xyz * 2.0 - 1.0);
 
+#if 1 // one-sided lighting
 	vec3 d = lprod_diffuse *      max(dot(l_tan, bump), 0.0);
 	vec3 s = lprod_specular * pow(max(dot(h_tan, bump), 0.0), shininess);
 
+#else // two-sided lighting
+	vec3 d = lprod_diffuse *      abs(dot(l_tan, bump));
+	vec3 s = lprod_specular * pow(abs(dot(h_tan, bump)), shininess);
+
+#endif
 #if 1 // apply albedo map sans alpha
 	vec3 tcolor = texture(albedo_map, tcoord_i).xyz;
 
