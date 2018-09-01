@@ -1,14 +1,14 @@
 Description
 -----------
 
-This is an experiment in self-hosted ChromeOS development focused on OpenGL ES. It relies on the ChromeOS-native GLESv2/EGL/Wayland stack and as such should run on all ChromeOS devices meeting the prerequisites, irrespective of [Crouton](https://github.com/dnschneid/crouton) conditions.
+This is an experiment in self-hosted ChromeOS development focused on OpenGL ES. It relies on the ChromeOS-native GLESv2/EGL/Wayland stacks and as such should run on any ChromeOS device meeting the prerequisites, irrespective of [Crouton](https://github.com/dnschneid/crouton) conditions.
 
 
 Prerequisites
 -------------
 
 * A ChromeOS device in developer mode.
-* ChromeOS revision with support for DRM render nodes, and a functioning Wayland server -- both naturally found on ChromeOS revisions with support for Android apps.
+* ChromeOS revision with support for DRM render nodes, and a functioning Wayland server -- both found on ChromeOS revisions with support for Android apps, e.g. R67.
 * [Chromebrew](https://github.com/skycocker/chromebrew)
 
 The following Chromebrew packages are required:
@@ -23,7 +23,7 @@ The following Chromebrew packages are required:
 How to Build
 ------------
 
-Running one of the build_chromeos_xxx.sh scripts in the source directiory builds the respective test_egl_xxx executable. Currently the compiler is hard-coded to clang++ and the linker to lld, so that building is R68-ready out of the box. To use the GNU linker and g++, partially comment-out the linker line like this:
+Running one of the `build_chromeos_xxx.sh` scripts in the source directiory builds the respective `test_egl_xxx` executable. Currently the compiler is hard-coded to clang++ and the linker to lld, so that building is R68-ready out of the box. To use the GNU linker and g++, partially comment-out the linker line like this:
 
 ```
 LFLAGS=(
@@ -82,4 +82,4 @@ $ ./test_egl_xxx -frames 0 -bitness 8 8 8 8 -print_egl_configs
 * If you need to see libEGL diagnostics/debug messages, set the `EGL_LOG_LEVEL` envvar to `debug`.
 
 
-Enjoy your pixels!
+Cherish your pixels!
