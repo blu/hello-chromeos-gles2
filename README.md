@@ -60,23 +60,21 @@ options:
 
 Example of CLI usage:
 ```
-$ EGL_LOG_LEVEL=none taskset 0xc ./test_egl_xxx -frames 2000 -config_id 5 -screen 640 640 60 -app albedo_map asset/texture/unperturbed_normal.raw 16 16 -app alt_anim
+$ EGL_LOG_LEVEL=warning taskset 0xc ./test_egl_xxx -frames 2000 -bitness 8 8 8 8 -screen 640 640 60 -app albedo_map asset/texture/unperturbed_normal.raw 16 16 -app alt_anim
 ```
 
 The above:
-* Sets the EGL diagnostics envvar to 'no diagnostics'.
+
+* Sets the EGL diagnostics envvar to 'warnings-only'.
 * Pins the app to the 3rd and 4th cores.
 * Specifies 2000 frames worth of runtime.
-* Specifies EGL drawable config of ID 5.
-* Specifies framebuffer geometry of 640x640x60Hz (refresh is required yet conveniently ignored)
+* Specifies framebuffer pixel format of RGBA8888 (mandatory for now).
+* Specifies framebuffer geometry of 640x640x60Hz (refresh is required yet conveniently ignored).
 * Passes two app-specific options via the `-app` arguments.
 
 Please, note that:
+
 * Resizing at runtime, including switching to fullscreen, is not implemented yet.
-* There is currently no automatic selection of configs for EGL drawables, so one *has* to be specified on the command line via `-config_id` option. To list all available EGL configs execute the next line, then take note of field `EGL_CONFIG_ID` for the config of choice:
-```
-$ ./test_egl_xxx -frames 0 -bitness 8 8 8 8 -print_egl_configs
-```
 * Only drawables of 32-bit pixel formats and `EGL_SURFACE_TYPE` of `EGL_PBUFFER_BIT` work currently; all other configs will result in garbled output or just fail to initialize.
 * Due to a deficiency in the current EGL/Wayland bridging, the frame loop is quite CPU-intensive. On bigLITTLE ARM machines one might want to pin the app to the big cores.
 * If you need to see libEGL diagnostics/debug messages, set the `EGL_LOG_LEVEL` envvar to `debug`.

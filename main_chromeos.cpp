@@ -836,7 +836,7 @@ bool EGL::initGLES2(
 		attr[na++] = EGL_ALPHA_SIZE;
 		attr[na++] = EGLint(nbits_a);
 		attr[na++] = EGL_SURFACE_TYPE;
-		attr[na++] = EGL_WINDOW_BIT;
+		attr[na++] = EGL_PBUFFER_BIT;
 		attr[na++] = EGL_RENDERABLE_TYPE;
 		attr[na++] = EGL_OPENGL_ES2_BIT;
 
