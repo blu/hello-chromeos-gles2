@@ -18,7 +18,7 @@ The following Chromebrew packages are required:
 * gcc7
 * llvm (optional up to R67, required from R68 onwards due to a limitation in the GNU linker from binutils package; see [Chromebrew ticket #2563](https://github.com/skycocker/chromebrew/issues/2563))
 * libwayland
-* libpng16
+* libpng
 
 
 How to Build
