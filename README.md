@@ -3,6 +3,7 @@ Description
 
 This is an experiment in self-hosted ChromeOS development focused on OpenGL ES. It relies on the ChromeOS-native GLESv2/EGL/Wayland stacks and as such should run on any ChromeOS device meeting the prerequisites, irrespective of [Crouton](https://github.com/dnschneid/crouton) conditions.
 
+![screenshot](asset/screenshot.png)
 
 Prerequisites
 -------------
