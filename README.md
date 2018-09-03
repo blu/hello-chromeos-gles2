@@ -76,7 +76,7 @@ The above:
 Please, note that:
 
 * Resizing at runtime, including switching to fullscreen, is not implemented yet.
-* Only drawables of 32-bit pixel formats and `EGL_SURFACE_TYPE` of `EGL_PBUFFER_BIT` work currently; all other configs will result in garbled output or just fail to initialize.
+* Only drawables of 32-bit pixel formats and `EGL_SURFACE_TYPE` of `EGL_PBUFFER_BIT` work currently; any other configs may result in exceptionally slow output or fail to initialize.
 * Due to a deficiency in the current EGL/Wayland bridging, the frame loop is quite CPU-intensive. On bigLITTLE ARM machines one might want to pin the app to the big cores.
 * If you need to see libEGL diagnostics/debug messages, set the `EGL_LOG_LEVEL` envvar to `debug`.
 
