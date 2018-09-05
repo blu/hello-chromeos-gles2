@@ -125,6 +125,6 @@ else
 	)
 fi
 
-BUILD_CMD="../clang++.sh -o "${TARGET}" "${CFLAGS[@]}" "${SOURCE[@]}" "${LFLAGS[@]}
+BUILD_CMD="./clang++.sh -o "${TARGET}" "${CFLAGS[@]}" "${SOURCE[@]}" "${LFLAGS[@]}
 echo $BUILD_CMD
 $BUILD_CMD
