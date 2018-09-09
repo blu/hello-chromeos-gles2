@@ -78,11 +78,9 @@ namespace { // anonymous
 const char arg_nframes[]       = "frames";
 const char arg_screen[]        = "screen";
 const char arg_bitness[]       = "bitness";
-const char arg_config_id[]     = "config_id";
 const char arg_fsaa[]          = "fsaa";
 const char arg_grab[]          = "grab_frame";
 const char arg_drawcalls[]     = "drawcalls";
-const char arg_print_configs[] = "print_egl_configs";
 
 #define FULLSCREEN_WIDTH 1366
 #define FULLSCREEN_HEIGHT 768
@@ -490,6 +488,9 @@ struct EGL
 	uint32_t window_w;
 	uint32_t window_h;
 
+	// primary framebuffer
+	GLuint prime_rbo;
+	GLuint prime_fbo;
 	int32_t drm_fd;
 	DRMBuffer imageDRM;
 
@@ -500,6 +501,8 @@ struct EGL
 	, image(EGL_NO_IMAGE_KHR)
 	, window_w(w)
 	, window_h(h)
+	, prime_rbo(0)
+	, prime_fbo(0)
 	, drm_fd(-1)
 	{
 		init_egl_ext();
@@ -507,10 +510,8 @@ struct EGL
 	}
 
 	bool initGLES2(
-		const unsigned config_id,
 		const unsigned fsaa,
-		const unsigned (& bitness)[4],
-		const bool print_configs);
+		const unsigned (& bitness)[4]);
 
 	void deinit();
 };
@@ -815,10 +816,8 @@ static int create_drm_dmabuf(
 }
 
 bool EGL::initGLES2(
-	const unsigned config_id,
 	const unsigned fsaa,
-	const unsigned (& bitness)[4],
-	const bool print_configs)
+	const unsigned (& bitness)[4])
 {
 	using util::scoped_ptr;
 	using util::scoped_functor;
@@ -833,7 +832,7 @@ bool EGL::initGLES2(
 		nbits_b +
 		nbits_a + 7 & ~7;
 
-	if (0 == config_id && 0 == nbits_pixel) {
+	if (0 == nbits_pixel) {
 		stream::cerr << "nil pixel size requested; abort\n";
 		return false;
 	}
@@ -958,7 +957,8 @@ bool EGL::initGLES2(
 		EGL_DMA_BUF_PLANE0_OFFSET_EXT,
 		EGLint(0),
 		EGL_DMA_BUF_PLANE0_PITCH_EXT,
-		EGLint(imageDRM.pitch)
+		EGLint(imageDRM.pitch),
+		EGL_NONE
 	};
 	image = eglCreateImageKHR(
 		display,
@@ -982,7 +982,39 @@ bool EGL::initGLES2(
 		return false;
 	}
 
-	// TODO: set the newly-acquired EGLimage as storage to our primary renderbuffer
+	// set the newly-acquired EGLimage as storage to our primary renderbuffer
+	glGenRenderbuffers(1, &prime_rbo);
+	assert(prime_rbo);
+	glBindRenderbuffer(GL_RENDERBUFFER, prime_rbo);
+
+	DEBUG_GL_ERR()
+
+	glEGLImageTargetRenderbufferStorageOES(GL_RENDERBUFFER, image);
+
+	DEBUG_GL_ERR()
+
+	glGenFramebuffers(1, &prime_fbo);
+	assert(prime_fbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, prime_fbo);
+
+	DEBUG_GL_ERR()
+
+	glFramebufferRenderbuffer(
+		GL_FRAMEBUFFER,
+		GL_COLOR_ATTACHMENT0,
+		GL_RENDERBUFFER,
+		prime_rbo);
+
+	DEBUG_GL_ERR()
+
+	const GLenum fbo_success = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+
+	if (GL_FRAMEBUFFER_COMPLETE != fbo_success) {
+		stream::cerr << __FUNCTION__ << " failed at glCheckFramebufferStatus\n";
+		return false;
+	}
+
+	glViewport(0, 0, window_w, window_h);
 
 	deinit_self.reset();
 	return true;
@@ -991,6 +1023,16 @@ bool EGL::initGLES2(
 
 void EGL::deinit()
 {
+	if (0 != prime_fbo) {
+		glDeleteFramebuffers(1, &prime_fbo);
+		prime_fbo = 0;
+	}
+
+	if (0 != prime_rbo) {
+		glDeleteRenderbuffers(1, &prime_rbo);
+		prime_rbo = 0;
+	}
+
 	if (EGL_NO_IMAGE_KHR != image) {
 		eglDestroyImageKHR(display, image);
 		image = EGL_NO_IMAGE_KHR;
@@ -1265,8 +1307,7 @@ validate_bitness(
 
 struct Param {
 	enum {
-		FLAG_PRINT_CONFIGS       = 1,
-		FLAG_PRINT_PERF_COUNTERS = 2
+		FLAG_PRINT_PERF_COUNTERS = 1
 	};
 	unsigned flags;         // combination of flags
 	unsigned image_w;       // frame width
@@ -1274,7 +1315,6 @@ struct Param {
 	unsigned bitness[4];    // rgba bitness
 	unsigned fsaa;          // fsaa number of samples
 	unsigned frames;        // frames to run
-	unsigned config_id;     // EGL config id
 	unsigned drawcalls;     // repeated drawcalls
 	unsigned grab_frame;    // frame to grab
 	const char* grab_filename;
@@ -1353,19 +1393,6 @@ parse_cli(const int argc, char** const argv, struct Param& param)
 			continue;
 		}
 
-		if (i + 1 < argc && !strcmp(argv[i] + prefix_len, arg_config_id)) {
-			if (1 != sscanf(argv[i + 1], "%u", &param.config_id) || 0 == param.config_id)
-				cli_err = true;
-
-			i += 1;
-			continue;
-		}
-
-		if (!strcmp(argv[i] + prefix_len, arg_print_configs)) {
-			param.flags |= unsigned(Param::FLAG_PRINT_CONFIGS);
-			continue;
-		}
-
 		cli_err = true;
 	}
 
@@ -1378,16 +1405,12 @@ parse_cli(const int argc, char** const argv, struct Param& param)
 			" <width> <height> <Hz>\t\t: set fullscreen output of specified geometry and refresh\n"
 			"\t" << util::arg_prefix << arg_bitness <<
 			" <r> <g> <b> <a>\t\t: set EGL config of specified RGBA bitness; default is screen's bitness\n"
-			"\t" << util::arg_prefix << arg_config_id <<
-			" <positive_integer>\t\t: set EGL config of specified ID; overrides any other config options\n"
 			"\t" << util::arg_prefix << arg_fsaa <<
 			" <positive_integer>\t\t: set fullscreen antialiasing; default is none\n"
 			"\t" << util::arg_prefix << arg_grab <<
 			" <unsigned_integer> <file>\t: grab the Nth frame to file; index is zero-based\n"
 			"\t" << util::arg_prefix << arg_drawcalls <<
 			" <positive_integer>\t\t: set number of drawcalls per frame; may be ignored by apps\n"
-			"\t" << util::arg_prefix << arg_print_configs <<
-			"\t\t\t: print available EGL configs\n"
 			"\t" << util::arg_prefix << util::arg_app <<
 			" <option> [<arguments>]\t\t: app-specific option" << '\n';
 
@@ -1415,7 +1438,6 @@ int main(
 	param.bitness[3] = 0;
 	param.fsaa = 0;
 	param.frames = -1U;
-	param.config_id = 0;
 	param.drawcalls = 0;
 	param.grab_frame = -1U;
 	param.grab_filename = NULL;
@@ -1423,13 +1445,11 @@ int main(
 	if (parse_cli(argc, argv, param))
 		return EXIT_FAILURE;
 
-	const bool print_configs       = bool(param.flags & unsigned(Param::FLAG_PRINT_CONFIGS));
 	const unsigned image_w         = param.image_w;
 	const unsigned image_h         = param.image_h;
 	const unsigned (& bitness)[4]  = param.bitness;
 	const unsigned fsaa            = param.fsaa;
 	const unsigned frames          = param.frames;
-	const unsigned config_id       = param.config_id;
 	const unsigned drawcalls       = param.drawcalls;
 	const unsigned grab_frame      = param.grab_frame;
 	const char* grab_filename      = param.grab_filename;
@@ -1437,7 +1457,7 @@ int main(
 	if (drawcalls && !hook::set_num_drawcalls(drawcalls))
 		stream::cerr << "drawcalls argument ignored by app\n";
 
-	if (0 == config_id && 0 == bitness[0]) {
+	if (0 == bitness[0]) {
 		stream::cerr << "unspecified framebuffer bitness; bailing out\n";
 		return EXIT_FAILURE;
 	}
@@ -1445,9 +1465,9 @@ int main(
 	// set up GLES
 	EGL egl(image_w, image_h);
 
-	if (!egl.initGLES2(config_id, fsaa, bitness, print_configs) ||
-		!reportGLCaps() ||
-		!hook::init_resources(argc, argv))
+	if (!egl.initGLES2(fsaa, bitness) ||
+	    !reportGLCaps() ||
+	    !hook::init_resources(argc, argv))
 	{
 		stream::cerr << "failed to initialise either GLES or resources; bailing out\n";
 		return EXIT_FAILURE;
