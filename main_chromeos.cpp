@@ -857,6 +857,8 @@ bool EGL::initGLES2(
 		return false;
 	}
 
+	scoped_ptr< EGL, scoped_functor > deinit_self(this);
+
 	drm_fd = open("/dev/dri/vgem", O_RDWR | O_CLOEXEC);
 
 	if (drm_fd < 0) {
@@ -879,13 +881,10 @@ bool EGL::initGLES2(
 
 	if (ret) {
 		stream::cerr << "Could not export buffer: " << strerror(ret) << " (" << ret << "), handle: " << imageDRM.handle << '\n';
-		destroy_drm_dumb_bo(drm_fd, imageDRM.handle);
 		return false;
 	}
 
 	display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
-
-	scoped_ptr< EGL, scoped_functor > deinit_self(this);
 
  	EGLint major;
  	EGLint minor;
