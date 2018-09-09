@@ -5,7 +5,7 @@
 	#include <EGL/egl.h>
 	#include <GLES2/gl2.h>
 	#include <GLES2/gl2ext.h>
-	#include "gles_ext.hpp"
+	#include "gles_ext.h"
 #endif
 
 #include <unistd.h>
@@ -14,7 +14,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <assert.h>
-#include "cmath_fix"
+#include <math.h>
 
 #include "scoped.hpp"
 #include "util_tex.hpp"
@@ -31,10 +31,10 @@ using util::deinit_resources_t;
 
 namespace { // anonymous
 
-#define SETUP_VERTEX_ATTR_POINTERS_MASK	(			\
-		SETUP_VERTEX_ATTR_POINTERS_MASK_vertex |	\
-		SETUP_VERTEX_ATTR_POINTERS_MASK_normal |	\
-		SETUP_VERTEX_ATTR_POINTERS_MASK_blendw |	\
+#define SETUP_VERTEX_ATTR_POINTERS_MASK	( \
+		SETUP_VERTEX_ATTR_POINTERS_MASK_vertex | \
+		SETUP_VERTEX_ATTR_POINTERS_MASK_normal | \
+		SETUP_VERTEX_ATTR_POINTERS_MASK_blendw | \
 		SETUP_VERTEX_ATTR_POINTERS_MASK_tcoord)
 
 #include "rendVertAttr_setupVertAttrPointers.hpp"

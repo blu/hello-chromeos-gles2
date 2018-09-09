@@ -8,7 +8,12 @@ extern PFNGLMAPBUFFEROESPROC         glMapBufferOES;
 extern PFNGLUNMAPBUFFEROESPROC       glUnmapBufferOES;
 extern PFNGLGETBUFFERPOINTERVOESPROC glGetBufferPointervOES;
 
-#endif
+#endif /* GL_OES_mapbuffer */
+#if GL_OES_EGL_image
+extern PFNGLEGLIMAGETARGETTEXTURE2DOESPROC           glEGLImageTargetTexture2DOES;
+extern PFNGLEGLIMAGETARGETRENDERBUFFERSTORAGEOESPROC glEGLImageTargetRenderbufferStorageOES;
+
+#endif /* GL_OES_EGL_image */
 #if PLATFORM_GL_OES_vertex_array_object
 extern PFNGLBINDVERTEXARRAYOESPROC    glBindVertexArrayOES;
 extern PFNGLDELETEVERTEXARRAYSOESPROC glDeleteVertexArraysOES;
@@ -30,5 +35,14 @@ extern PFNGLGETOBJECTPTRLABELKHRPROC    glGetObjectPtrLabelKHR;
 extern PFNGLGETPOINTERVKHRPROC          glGetPointervKHR;
 
 #endif
-#endif // GL_GLEXT_PROTOTYPES
-#endif // PLATFORM_GLES
+#if __cplusplus
+extern "C" {
+#endif
+
+void init_gles_ext(void);
+
+#if __cplusplus
+}
+#endif
+#endif /* GL_GLEXT_PROTOTYPES */
+#endif /* PLATFORM_GLES */

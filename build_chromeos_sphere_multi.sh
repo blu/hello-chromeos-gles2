@@ -1,26 +1,46 @@
 #!/bin/bash
 
 TARGET=test_egl_sphere_multi
-SOURCE=(
+SOURCES_C=(
+	linux-dmabuf-protocol.c
+	egl_ext.c
+	gles_ext.c
+)
+SOURCES=(
 	main_chromeos.cpp
 	app_sphere_multi.cpp
 	util_tex.cpp
 	util_file.cpp
 	util_misc.cpp
-	gles_ext.cpp
+)
+CFLAGS_C=(
+	-pipe
+	-fstrict-aliasing
+	-Wreturn-type
+	-Wunused-variable
+	-Wunused-value
+	-Wno-incompatible-function-pointer-types
+	-DPLATFORM_EGL
+	-DPLATFORM_GLES
+	-DPLATFORM_GL_OES_vertex_array_object
+	-DPLATFORM_GL_KHR_debug
+	-I./khronos
 )
 CFLAGS=(
-	-std=c++11
 	-pipe
+	-std=c++11
 	-fno-exceptions
 	-fno-rtti
 	-fstrict-aliasing
 	-Wreturn-type
 	-Wunused-variable
 	-Wunused-value
+	-DPLATFORM_EGL
 	-DPLATFORM_GLES
 	-DPLATFORM_GL_OES_vertex_array_object
+	-DPLATFORM_GL_KHR_debug
 	-I./khronos
+	-I./libdrm
 )
 LFLAGS=(
 	-fuse-ld=lld
@@ -108,6 +128,13 @@ elif [[ ${HOSTTYPE:0:3} == "x86" ]]; then
 fi
 
 if [[ $1 == "debug" ]]; then
+	CFLAGS_C+=(
+		-Wall
+		-Wno-unused-command-line-argument
+		-O0
+		-g
+		-DDEBUG
+	)
 	CFLAGS+=(
 		-Wall
 		-O0
@@ -116,6 +143,13 @@ if [[ $1 == "debug" ]]; then
 		-DPLATFORM_GL_KHR_debug
 	)
 else
+	CFLAGS_C+=(
+		-Wno-unused-command-line-argument
+		-ffast-math
+		-funroll-loops
+		-O3
+		-DNDEBUG
+	)
 	CFLAGS+=(
 		-ffast-math
 		-funroll-loops
@@ -124,6 +158,14 @@ else
 	)
 fi
 
-BUILD_CMD="./clang++.sh -o "${TARGET}" "${CFLAGS[@]}" "${SOURCE[@]}" "${LFLAGS[@]}
+BUILD_CMD_C="./clang.sh -c "${CFLAGS_C[@]}" "${SOURCES_C[@]}
+echo $BUILD_CMD_C
+$BUILD_CMD_C
+
+for file in ${SOURCES_C[@]}; do
+	SOURCES+=(${file%\.c}.o)
+done
+
+BUILD_CMD="./clang++.sh -o "${TARGET}" "${CFLAGS[@]}" "${SOURCES[@]}" "${LFLAGS[@]}
 echo $BUILD_CMD
 $BUILD_CMD

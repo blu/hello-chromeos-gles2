@@ -5,7 +5,7 @@
 	#include <EGL/egl.h>
 	#include <GLES2/gl2.h>
 	#include <GLES2/gl2ext.h>
-	#include "gles_ext.hpp"
+	#include "gles_ext.h"
 #endif
 
 #include <unistd.h>

@@ -1,4 +1,5 @@
 #include <EGL/egl.h>
+#include <EGL/eglext.h>
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
 
@@ -12,7 +13,10 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/ioctl.h>
 #include <wayland-client.h>
+#include <drm_fourcc.h>
+#include "linux-dmabuf-unstable-v1-client-protocol.h"
 
 #include <string>
 #include <sstream>
@@ -28,6 +32,9 @@
 #include "util_misc.hpp"
 #include "scoped.hpp"
 #include "pure_macro.hpp"
+
+#include "egl_ext.h"
+#include "gles_ext.h"
 #include "timer.h"
 
 // verify iostream-free status
@@ -80,16 +87,6 @@ const char arg_print_configs[] = "print_egl_configs";
 #define FULLSCREEN_WIDTH 1366
 #define FULLSCREEN_HEIGHT 768
 
-template < typename T >
-inline T min(const T& a, const T& b) {
-	return a < b ? a : b;
-}
-
-template < typename T >
-inline T max(const T& a, const T& b) {
-	return a > b ? a : b;
-}
-
 typedef uint32_t pixel_t;
 
 wl_compositor *compositor;
@@ -98,6 +95,7 @@ wl_shell *shell;
 wl_shm *shm;
 wl_buffer *bufferW;
 wl_buffer *bufferF;
+zwp_linux_dmabuf_v1 *dmabuf;
 
 bool frame_error;
 uint32_t frames_done;
@@ -140,14 +138,41 @@ void cleanup_wayland(void)
 	wl_display_disconnect(display);
 }
 
+static void
+dmabuf_format(void *data, struct zwp_linux_dmabuf_v1 *zwp_linux_dmabuf, uint32_t format) {
+	fprintf(stderr, "%s, 0x%08x, %c%c%c%c\n", __FUNCTION__, format,
+		char(format >>  0),
+		char(format >>  8),
+		char(format >> 16),
+		char(format >> 24));
+}
+
+static void
+dmabuf_modifier(void *data, struct zwp_linux_dmabuf_v1 *zwp_linux_dmabuf,
+	uint32_t format, uint32_t modifier_hi, uint32_t modifier_lo) {
+}
+
+static const struct zwp_linux_dmabuf_v1_listener dmabuf_listener = {
+    .format = dmabuf_format, // up to protocol version 2 zwp_linux_dmabuf_v1_listener::format is called back
+    .modifier = dmabuf_modifier // from protocol version 3 onwards zwp_linux_dmabuf_v1_listener::modifier is called back
+};
+
 void registry_global(void *data, wl_registry *registry, uint32_t name, const char *interface, uint32_t version)
 {
+#if DEBUG
+    fprintf(stderr, "%s, %s id %d version %d\n", __FUNCTION__, interface, name, version);
+
+#endif
 	if (strcmp(interface, wl_compositor_interface.name) == 0)
-		compositor = static_cast< wl_compositor* >(wl_registry_bind(registry, name, &wl_compositor_interface, min(version, 4U)));
+		compositor = static_cast< wl_compositor* >(wl_registry_bind(registry, name, &wl_compositor_interface, 3));
 	else if (strcmp(interface, wl_shm_interface.name) == 0)
-		shm = static_cast< wl_shm* >(wl_registry_bind(registry, name, &wl_shm_interface, min(version, 1U)));
+		shm = static_cast< wl_shm* >(wl_registry_bind(registry, name, &wl_shm_interface, 1));
+	else if (strcmp(interface, zwp_linux_dmabuf_v1_interface.name) == 0) {
+		dmabuf = static_cast< zwp_linux_dmabuf_v1* >(wl_registry_bind(registry, name, &zwp_linux_dmabuf_v1_interface, 2));
+		zwp_linux_dmabuf_v1_add_listener(dmabuf, &dmabuf_listener, data);
+	}
 	else if (strcmp(interface, wl_shell_interface.name) == 0)
-		shell = static_cast< wl_shell* >(wl_registry_bind(registry, name, &wl_shell_interface, min(version, 1U)));
+		shell = static_cast< wl_shell* >(wl_registry_bind(registry, name, &wl_shell_interface, 1));
 }
 
 void registry_global_remove(void *, wl_registry *, uint32_t) {
@@ -438,23 +463,47 @@ os_create_anonymous_file(off_t size)
 // EGL helper
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+struct DRMBuffer {
+	// DRM dumb-buffer-object properties
+	uint32_t handle;
+	uint32_t pitch;
+	uint64_t size;
+
+	// buffer-object PRIME file descriptor
+	int32_t dmabuf_fd;
+
+	DRMBuffer()
+	: handle(0)
+	, pitch(0)
+	, size(0)
+	, dmabuf_fd(-1)
+	{
+	}
+};
+
 struct EGL
 {
 	EGLDisplay display;
 	EGLContext context;
-	EGLSurface surface;
+	EGLImage image;
 
 	uint32_t window_w;
 	uint32_t window_h;
+
+	int32_t drm_fd;
+	DRMBuffer imageDRM;
 
 	EGL(uint32_t w,
 		uint32_t h)
 	: display(EGL_NO_DISPLAY)
 	, context(EGL_NO_CONTEXT)
-	, surface(EGL_NO_SURFACE)
+	, image(EGL_NO_IMAGE_KHR)
 	, window_w(w)
 	, window_h(h)
+	, drm_fd(-1)
 	{
+		init_egl_ext();
+		init_gles_ext();
 	}
 
 	bool initGLES2(
@@ -464,7 +513,6 @@ struct EGL
 		const bool print_configs);
 
 	void deinit();
-	void swapBuffers() const;
 };
 
 static std::string
@@ -694,7 +742,6 @@ reportGLError(
 	return true;
 }
 
-
 template <>
 class scoped_functor< EGL > {
 public:
@@ -705,6 +752,66 @@ public:
 };
 
 } // namespace util
+
+static int create_drm_dumb_bo(
+	const int32_t drm_fd,
+	const uint32_t width,
+	const uint32_t height,
+	const uint32_t bpp,
+	uint32_t *const handle,
+	uint32_t *const pitch,
+	uint64_t *const size) {
+
+	assert(handle);
+	assert(pitch);
+	assert(size);
+
+	struct drm_mode_create_dumb create_request = {
+		.width  = width,
+		.height = height,
+		.bpp    = bpp
+	};
+	const int ret = ioctl(drm_fd, DRM_IOCTL_MODE_CREATE_DUMB, &create_request);
+	if (ret)
+		return ret;
+
+	*handle = create_request.handle;
+	*pitch = create_request.pitch;
+	*size = create_request.size;
+	return 0;
+}
+
+static int destroy_drm_dumb_bo(
+	const int32_t drm_fd,
+	const uint32_t handle) {
+
+	struct drm_mode_destroy_dumb destroy_request = {
+		.handle = handle
+	};
+
+	const int ret = ioctl(drm_fd, DRM_IOCTL_MODE_DESTROY_DUMB, &destroy_request);
+	return ret;
+}
+
+static int create_drm_dmabuf(
+	const int32_t drm_fd,
+	const uint32_t handle,
+	int32_t *const dmabuf_fd)
+{
+	struct drm_prime_handle prime_request = {
+		.handle = handle,
+		.flags  = DRM_CLOEXEC | DRM_RDWR,
+		.fd     = -1
+	};
+
+	const int ret = ioctl(drm_fd, DRM_IOCTL_PRIME_HANDLE_TO_FD, &prime_request);
+
+	if (ret || prime_request.fd < 0)
+		return ret;
+
+	*dmabuf_fd = prime_request.fd;
+	return 0;
+}
 
 bool EGL::initGLES2(
 	const unsigned config_id,
@@ -731,6 +838,50 @@ bool EGL::initGLES2(
 	}
 
 	deinit();
+
+	uint32_t fourcc = 0;
+	switch (nbits_r << 24 | nbits_g << 16 | nbits_b << 8 | nbits_a) {
+	case 0x08080808:
+		fourcc = DRM_FORMAT_ARGB8888;
+		break;
+	case 0x08080800:
+		fourcc = DRM_FORMAT_XRGB8888;
+		break;
+	case 0x05060500:
+		fourcc = DRM_FORMAT_RGB565;
+		break;
+	}
+
+	if (0 == fourcc) {
+		stream::cerr << "unsupported pixel format requested; abort\n";
+		return false;
+	}
+
+	drm_fd = open("/dev/dri/vgem", O_RDWR | O_CLOEXEC);
+
+	if (drm_fd < 0) {
+		stream::cerr << "Could not open /dev/dri/vgem: " << strerror(errno) << '\n';
+		return false;
+	}
+
+	int ret = create_drm_dumb_bo(
+		drm_fd, window_w, window_h, nbits_pixel,
+		&imageDRM.handle,
+		&imageDRM.pitch,
+		&imageDRM.size);
+
+	if (ret) {
+		stream::cerr << "Could not allocate dumb buffer: " << strerror(ret) << " (" << ret << ")\n";
+		return false;
+	}
+
+	ret = create_drm_dmabuf(drm_fd, imageDRM.handle, &imageDRM.dmabuf_fd);
+
+	if (ret) {
+		stream::cerr << "Could not export buffer: " << strerror(ret) << " (" << ret << "), handle: " << imageDRM.handle << '\n';
+		destroy_drm_dumb_bo(drm_fd, imageDRM.handle);
+		return false;
+	}
 
 	display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
 
@@ -760,208 +911,78 @@ bool EGL::initGLES2(
 	if (str_exten_nodisp)
 		stream::cout << "\negl extensions (no display):\n\t" << str_exten_nodisp << '\n';
 
+	if (NULL == strstr(str_exten, "EGL_KHR_image_base")) {
+		stream::cerr << "egl does not support EGL_KHR_image_base\n";
+		return false;
+	}
+	if (NULL == strstr(str_exten, "EGL_KHR_no_config_context")) {
+		stream::cerr << "egl does not suppor EGL_KHR_no_config_context\n";
+		return false;
+	}
+	if (NULL == strstr(str_exten, "EGL_KHR_surfaceless_context")) {
+		stream::cerr << "egl does not support EGL_KHR_surfaceless_context\n";
+		return false;
+	}
+	if (NULL == strstr(str_exten, "EGL_EXT_image_dma_buf_import")) {
+		stream::cerr << "egl does not support EGL_EXT_image_dma_buf_import\n";
+		return false;
+	}
+
 	eglBindAPI(EGL_OPENGL_ES_API);
-
-	EGLConfig config[128];
-	EGLint num_config;
-
-	if (EGL_FALSE == eglGetConfigs(display, config, EGLint(sizeof(config) / sizeof(config[0])), &num_config)) {
-		stream::cerr << "eglGetConfigs() failed\n";
-		return false;
-	}
-
-	for (EGLint i = 0; i < num_config && print_configs; ++i) {
-		stream::cout << "\nconfig " << i << ":\n";
-
-		static const EGLint attr[] = {
-			EGL_BUFFER_SIZE,
-			EGL_ALPHA_SIZE,
-			EGL_BLUE_SIZE,
-			EGL_GREEN_SIZE,
-			EGL_RED_SIZE,
-			EGL_DEPTH_SIZE,
-			EGL_STENCIL_SIZE,
-			EGL_CONFIG_CAVEAT,
-			EGL_CONFIG_ID,
-			EGL_LEVEL,
-			EGL_MAX_PBUFFER_HEIGHT,
-			EGL_MAX_PBUFFER_PIXELS,
-			EGL_MAX_PBUFFER_WIDTH,
-			EGL_NATIVE_RENDERABLE,
-			EGL_NATIVE_VISUAL_ID,
-			EGL_NATIVE_VISUAL_TYPE,
-			EGL_SAMPLES,
-			EGL_SAMPLE_BUFFERS,
-			EGL_SURFACE_TYPE,
-			EGL_TRANSPARENT_TYPE,
-			EGL_TRANSPARENT_BLUE_VALUE,
-			EGL_TRANSPARENT_GREEN_VALUE,
-			EGL_TRANSPARENT_RED_VALUE,
-			EGL_BIND_TO_TEXTURE_RGB,
-			EGL_BIND_TO_TEXTURE_RGBA,
-			EGL_MIN_SWAP_INTERVAL,
-			EGL_MAX_SWAP_INTERVAL,
-			EGL_LUMINANCE_SIZE,
-			EGL_ALPHA_MASK_SIZE,
-			EGL_COLOR_BUFFER_TYPE,
-			EGL_RENDERABLE_TYPE,
-			EGL_CONFORMANT
-		};
-
-		for (unsigned j = 0; j < sizeof(attr) / sizeof(attr[0]); ++j) {
-			EGLint value;
-
-			if (EGL_FALSE == eglGetConfigAttrib(display, config[i], attr[j], &value)) {
-				stream::cerr << "eglGetConfigAttrib() failed\n";
-				continue;
-			}
-
-			stream::cout << string_from_EGL_attrib(attr[j]) << " 0x" <<
-				stream::hex << stream::setw(8) << stream::setfill('0') << value << stream::dec << '\n';
-		}
-	}
-
-	EGLint attr[64];
-	unsigned na = 0;
-
-	if (0 == config_id) {
-		attr[na++] = EGL_BUFFER_SIZE;
-		attr[na++] = EGLint(nbits_pixel);
-		attr[na++] = EGL_RED_SIZE;
-		attr[na++] = EGLint(nbits_r);
-		attr[na++] = EGL_GREEN_SIZE;
-		attr[na++] = EGLint(nbits_g);
-		attr[na++] = EGL_BLUE_SIZE;
-		attr[na++] = EGLint(nbits_b);
-		attr[na++] = EGL_ALPHA_SIZE;
-		attr[na++] = EGLint(nbits_a);
-		attr[na++] = EGL_SURFACE_TYPE;
-		attr[na++] = EGL_PBUFFER_BIT;
-		attr[na++] = EGL_RENDERABLE_TYPE;
-		attr[na++] = EGL_OPENGL_ES2_BIT;
-
-		if (hook::requires_depth()) {
-			attr[na++] = EGL_DEPTH_SIZE;
-			attr[na++] = 16;
-		}
-
-		if (fsaa) {
-			attr[na++] = EGL_SAMPLE_BUFFERS;
-			attr[na++] = 1;
-			attr[na++] = EGL_SAMPLES;
-			attr[na++] = EGLint(fsaa);
-		}
-		else {
-			attr[na++] = EGL_CONFIG_CAVEAT;
-			attr[na++] = EGL_NONE;
-		}
-	}
-	else {
-		attr[na++] = EGL_CONFIG_ID;
-		attr[na++] = EGLint(config_id);
-	}
-
-	assert(na < sizeof(attr) / sizeof(attr[0]));
-
-	attr[na] = EGL_NONE;
-
-	if (EGL_FALSE == eglChooseConfig(display, attr, config, EGLint(sizeof(config) / sizeof(config[0])), &num_config)) {
-		stream::cerr << "eglChooseConfig() failed\n";
-		return false;
-	}
-
-	unsigned best_match = 0;
-
-	for (EGLint i = 1; i < num_config; ++i) {
-		EGLint value[2];
-
-		eglGetConfigAttrib(display, config[best_match], EGL_CONFIG_CAVEAT, &value[0]);
-		eglGetConfigAttrib(display, config[i], EGL_CONFIG_CAVEAT, &value[1]);
-
-		if (value[1] == EGL_SLOW_CONFIG)
-			continue;
-
-		if (value[0] == EGL_SLOW_CONFIG) {
-			best_match = i;
-			continue;
-		}
-
-		eglGetConfigAttrib(display, config[best_match], EGL_BUFFER_SIZE, &value[0]);
-		eglGetConfigAttrib(display, config[i], EGL_BUFFER_SIZE, &value[1]);
-
-		if (value[0] < value[1])
-			continue;
-
-		eglGetConfigAttrib(display, config[best_match], EGL_ALPHA_SIZE, &value[0]);
-		eglGetConfigAttrib(display, config[i], EGL_ALPHA_SIZE, &value[1]);
-
-		if (value[0] < value[1])
-			continue;
-
-		eglGetConfigAttrib(display, config[best_match], EGL_DEPTH_SIZE, &value[0]);
-		eglGetConfigAttrib(display, config[i], EGL_DEPTH_SIZE, &value[1]);
-
-		if (value[0] < value[1])
-			continue;
-
-		eglGetConfigAttrib(display, config[best_match], EGL_SAMPLES, &value[0]);
-		eglGetConfigAttrib(display, config[i], EGL_SAMPLES, &value[1]);
-
-		if (value[0] < value[1])
-			continue;
-
-		best_match = i;
-	}
-
-	EGLint value;
-	eglGetConfigAttrib(display, config[best_match], EGL_CONFIG_ID, &value);
-
-	stream::cout << "\nchoosing configs returned " << num_config << " candidate(s), best match is EGL_CONFIG_ID 0x" <<
-		stream::hex << stream::setw(8) << stream::setfill('0') << value << stream::dec << "\n\n";
 
 	const EGLint context_attr[] = {
 		EGL_CONTEXT_CLIENT_VERSION, 2,
 		EGL_NONE
 	};
 
-	context = eglCreateContext(display, config[best_match], EGL_NO_CONTEXT, context_attr);
+	context = eglCreateContext(
+		display,
+		EGL_NO_CONFIG_KHR,
+		EGL_NO_CONTEXT,
+		context_attr);
 
 	if (EGL_NO_CONTEXT == context) {
 		stream::cerr << "eglCreateContext() failed\n";
 		return false;
 	}
 
-#if 0
-	surface = eglCreateWindowSurface(display, config[best_match], (EGLNativeWindowType) 0, NULL);
-
-#else
-	const EGLint attr_list[] = {
+	const EGLint image_attr[] = {
 		EGL_WIDTH,
 		EGLint(window_w),
 		EGL_HEIGHT,
 		EGLint(window_h),
-		EGL_TEXTURE_FORMAT,
-		EGL_NO_TEXTURE,
-		EGL_NONE
+		EGL_LINUX_DRM_FOURCC_EXT,
+		EGLint(fourcc),
+		EGL_DMA_BUF_PLANE0_FD_EXT,
+		EGLint(imageDRM.dmabuf_fd),
+		EGL_DMA_BUF_PLANE0_OFFSET_EXT,
+		EGLint(0),
+		EGL_DMA_BUF_PLANE0_PITCH_EXT,
+		EGLint(imageDRM.pitch)
 	};
+	image = eglCreateImageKHR(
+		display,
+		EGL_NO_CONTEXT,
+		EGL_LINUX_DMA_BUF_EXT,
+		EGLClientBuffer(NULL),
+		image_attr);
 
-	surface = eglCreatePbufferSurface(display, config[best_match], attr_list);
-
-#endif
-	if (EGL_NO_SURFACE == surface) {
-		stream::cerr << "eglCreateWindowSurface() failed\n";
+	if (EGL_NO_IMAGE_KHR == image) {
+		stream::cerr << "eglCreateImage() failed\n";
 		return false;
 	}
 
-	if (EGL_FALSE == eglSurfaceAttrib(display, surface, EGL_SWAP_BEHAVIOR, EGL_BUFFER_DESTROYED)) {
-		stream::cerr << "eglSurfaceAttrib() failed\n";
-		return false;
-	}
+	if (EGL_FALSE == eglMakeCurrent(
+			display,
+			EGL_NO_SURFACE,
+			EGL_NO_SURFACE,
+			context)) {
 
-	if (EGL_FALSE == eglMakeCurrent(display, surface, surface, context)) {
 		stream::cerr << "eglMakeCurrent() failed\n";
 		return false;
 	}
+
+	// TODO: set the newly-acquired EGLimage as storage to our primary renderbuffer
 
 	deinit_self.reset();
 	return true;
@@ -970,30 +991,38 @@ bool EGL::initGLES2(
 
 void EGL::deinit()
 {
-	if (EGL_NO_SURFACE != surface) {
-		eglMakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
-		eglDestroySurface(display, surface);
+	if (EGL_NO_IMAGE_KHR != image) {
+		eglDestroyImage(display, image);
+		image = EGL_NO_IMAGE_KHR;
+	}
 
-		surface = EGL_NO_SURFACE;
+	if (-1 != imageDRM.dmabuf_fd) {
+		close(imageDRM.dmabuf_fd);
+		imageDRM.dmabuf_fd = -1;
+	}
+
+	if (0 != imageDRM.handle) {
+		destroy_drm_dumb_bo(drm_fd, imageDRM.handle);
+		imageDRM.handle = 0;
+		imageDRM.pitch = 0;
+		imageDRM.size = 0;
+	}
+
+	if (-1 != drm_fd) {
+		close(drm_fd);
+		drm_fd = -1;
 	}
 
 	if (EGL_NO_CONTEXT != context) {
+		eglMakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
 		eglDestroyContext(display, context);
-
 		context = EGL_NO_CONTEXT;
 	}
 
 	if (EGL_NO_DISPLAY != display) {
 		eglTerminate(display);
-
 		display = EGL_NO_DISPLAY;
 	}
-}
-
-
-void EGL::swapBuffers() const
-{
-	eglSwapBuffers(display, surface);
 }
 
 
@@ -1413,7 +1442,7 @@ int main(
 		return EXIT_FAILURE;
 	}
 
-	// set up gles
+	// set up GLES
 	EGL egl(image_w, image_h);
 
 	if (!egl.initGLES2(config_id, fsaa, bitness, print_configs) ||
