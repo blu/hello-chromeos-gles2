@@ -494,7 +494,7 @@ struct EGL
 	DRMBuffer imageDRM;
 
 	EGL(uint32_t w,
-		uint32_t h)
+	    uint32_t h)
 	: display(EGL_NO_DISPLAY)
 	, context(EGL_NO_CONTEXT)
 	, image(EGL_NO_IMAGE_KHR)
@@ -772,6 +772,7 @@ static int create_drm_dumb_bo(
 		.bpp    = bpp
 	};
 	const int ret = ioctl(drm_fd, DRM_IOCTL_MODE_CREATE_DUMB, &create_request);
+
 	if (ret)
 		return ret;
 
@@ -806,7 +807,7 @@ static int create_drm_dmabuf(
 
 	const int ret = ioctl(drm_fd, DRM_IOCTL_PRIME_HANDLE_TO_FD, &prime_request);
 
-	if (ret || prime_request.fd < 0)
+	if (ret)
 		return ret;
 
 	*dmabuf_fd = prime_request.fd;
@@ -862,7 +863,7 @@ bool EGL::initGLES2(
 	drm_fd = open("/dev/dri/vgem", O_RDWR | O_CLOEXEC);
 
 	if (drm_fd < 0) {
-		stream::cerr << "Could not open /dev/dri/vgem: " << strerror(errno) << '\n';
+		stream::cerr << "could not open /dev/dri/vgem: " << strerror(errno) << '\n';
 		return false;
 	}
 
@@ -873,14 +874,14 @@ bool EGL::initGLES2(
 		&imageDRM.size);
 
 	if (ret) {
-		stream::cerr << "Could not allocate dumb buffer: " << strerror(ret) << " (" << ret << ")\n";
+		stream::cerr << "could not allocate dumb buffer: " << strerror(ret) << " (" << ret << ")\n";
 		return false;
 	}
 
 	ret = create_drm_dmabuf(drm_fd, imageDRM.handle, &imageDRM.dmabuf_fd);
 
 	if (ret) {
-		stream::cerr << "Could not export buffer: " << strerror(ret) << " (" << ret << "), handle: " << imageDRM.handle << '\n';
+		stream::cerr << "could not export buffer: " << strerror(ret) << " (" << ret << ")\n";
 		return false;
 	}
 
@@ -991,7 +992,7 @@ bool EGL::initGLES2(
 void EGL::deinit()
 {
 	if (EGL_NO_IMAGE_KHR != image) {
-		eglDestroyImage(display, image);
+		eglDestroyImageKHR(display, image);
 		image = EGL_NO_IMAGE_KHR;
 	}
 
