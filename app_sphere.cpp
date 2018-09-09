@@ -5,7 +5,7 @@
 	#include <EGL/egl.h>
 	#include <GLES2/gl2.h>
 	#include <GLES2/gl2ext.h>
-	#include "gles_ext.hpp"
+	#include "gles_ext.h"
 #endif
 
 #include <unistd.h>
@@ -236,6 +236,7 @@ bool createIndexedPolarSphere(
 	const GLuint vbo_arr,
 	const GLuint vbo_idx,
 	unsigned& num_faces,
+	const int aspect_u_over_v,
 	const int rows = 33,
 	const int cols = 65)
 {
@@ -276,7 +277,7 @@ bool createIndexedPolarSphere(
 		arr()[ai].tan[2] = 0;
 
 		arr()[ai].txc[0] = g_tile * (j + .5f) / (cols - 1);
-		arr()[ai].txc[1] = g_tile * .5f;
+		arr()[ai].txc[1] = g_tile * (1.f / aspect_u_over_v);
 		++ai;
 	}
 
@@ -305,7 +306,7 @@ bool createIndexedPolarSphere(
 			arr()[ai].tan[2] = 0;
 
 			arr()[ai].txc[0] = g_tile * j / (cols - 1);
-			arr()[ai].txc[1] = g_tile * (rows - 1 - i) / (2 * rows - 2);
+			arr()[ai].txc[1] = g_tile * (rows - 1 - i) / (aspect_u_over_v * rows - aspect_u_over_v);
 			++ai;
 		}
 
@@ -661,7 +662,8 @@ bool init_resources(
 	if (!createIndexedPolarSphere(
 			g_vbo[VBO_SPHERE_VTX],
 			g_vbo[VBO_SPHERE_IDX],
-			g_num_faces[MESH_SPHERE]))
+			g_num_faces[MESH_SPHERE],
+			g_normal.w == g_normal.h ? 2 : 1))
 	{
 		stream::cerr << __FUNCTION__ << " failed at createIndexedPolarSphere\n";
 		return false;

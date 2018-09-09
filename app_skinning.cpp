@@ -5,7 +5,7 @@
 	#include <EGL/egl.h>
 	#include <GLES2/gl2.h>
 	#include <GLES2/gl2ext.h>
-	#include "gles_ext.hpp"
+	#include "gles_ext.h"
 #endif
 
 #include <unistd.h>
@@ -14,7 +14,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <assert.h>
-#include "cmath_fix"
+#include <math.h>
 
 #include "scoped.hpp"
 #include "util_tex.hpp"
@@ -31,10 +31,10 @@ using util::deinit_resources_t;
 
 namespace { // anonymous
 
-#define SETUP_VERTEX_ATTR_POINTERS_MASK	(			\
-		SETUP_VERTEX_ATTR_POINTERS_MASK_vertex |	\
-		SETUP_VERTEX_ATTR_POINTERS_MASK_normal |	\
-		SETUP_VERTEX_ATTR_POINTERS_MASK_blendw |	\
+#define SETUP_VERTEX_ATTR_POINTERS_MASK	( \
+		SETUP_VERTEX_ATTR_POINTERS_MASK_vertex | \
+		SETUP_VERTEX_ATTR_POINTERS_MASK_normal | \
+		SETUP_VERTEX_ATTR_POINTERS_MASK_blendw | \
 		SETUP_VERTEX_ATTR_POINTERS_MASK_tcoord)
 
 #include "rendVertAttr_setupVertAttrPointers.hpp"
@@ -225,6 +225,7 @@ bool parse_cli(
 	return cli_err;
 }
 
+// set up skeleton animation, type A
 void setupSkeletonAnimA()
 {
 	const simd::quat identq(0.f, 0.f, 0.f, 1.f);
@@ -306,6 +307,7 @@ void setupSkeletonAnimA()
 	}
 }
 
+// set up skeleton animation, type B
 void setupSkeletonAnimB()
 {
 	const simd::quat identq(0.f, 0.f, 0.f, 1.f);
@@ -528,6 +530,7 @@ bool init_resources(
 	};
 
 	/////////////////////////////////////////////////////////////////
+	// set up misc control bits and values
 
 	glDisable(GL_CULL_FACE);
 	glEnable(GL_DEPTH_TEST);
@@ -541,11 +544,15 @@ bool init_resources(
 	glClearDepthf(1.f);
 
 	/////////////////////////////////////////////////////////////////
+	// reserve all necessary texture objects
 
 	glGenTextures(sizeof(g_tex) / sizeof(g_tex[0]), g_tex);
 
 	for (unsigned i = 0; i < sizeof(g_tex) / sizeof(g_tex[0]); ++i)
 		assert(g_tex[i]);
+
+	/////////////////////////////////////////////////////////////////
+	// load textures
 
 	if (!util::setupTexture2D(g_tex[TEX_NORMAL], g_normal.filename, g_normal.w, g_normal.h)) {
 		stream::cerr << __FUNCTION__ << " failed at setupTexture2D\n";
@@ -558,12 +565,14 @@ bool init_resources(
 	}
 
 	/////////////////////////////////////////////////////////////////
+	// init the program/uniforms matrix to all empty
 
 	for (unsigned i = 0; i < PROG_COUNT; ++i)
 		for (unsigned j = 0; j < UNI_COUNT; ++j)
 			g_uni[i][j] = -1;
 
 	/////////////////////////////////////////////////////////////////
+	// create the shader program from two shaders
 
 	g_shader_vert[PROG_SKIN] = glCreateShader(GL_VERTEX_SHADER);
 	assert(g_shader_vert[PROG_SKIN]);
@@ -595,8 +604,11 @@ bool init_resources(
 		return false;
 	}
 
-	g_uni[PROG_SKIN][UNI_MVP]	 = glGetUniformLocation(g_shader_prog[PROG_SKIN], "mvp");
-	g_uni[PROG_SKIN][UNI_BONE]	 = glGetUniformLocation(g_shader_prog[PROG_SKIN], "bone");
+	/////////////////////////////////////////////////////////////////
+	// query the program about known uniform vars and vertex attribs
+
+	g_uni[PROG_SKIN][UNI_MVP]    = glGetUniformLocation(g_shader_prog[PROG_SKIN], "mvp");
+	g_uni[PROG_SKIN][UNI_BONE]   = glGetUniformLocation(g_shader_prog[PROG_SKIN], "bone");
 	g_uni[PROG_SKIN][UNI_LP_OBJ] = glGetUniformLocation(g_shader_prog[PROG_SKIN], "lp_obj");
 	g_uni[PROG_SKIN][UNI_VP_OBJ] = glGetUniformLocation(g_shader_prog[PROG_SKIN], "vp_obj");
 
@@ -609,6 +621,7 @@ bool init_resources(
 	g_active_attr_semantics[PROG_SKIN].registerTCoordAttr(glGetAttribLocation(g_shader_prog[PROG_SKIN], "at_MultiTexCoord0"));
 
 	/////////////////////////////////////////////////////////////////
+	// set up skeleton in binding pose
 
 	const float bolen = .25f;
 
@@ -689,38 +702,39 @@ bool init_resources(
 		setupSkeletonAnimA();
 
 	/////////////////////////////////////////////////////////////////
+	// set up mesh of { pos, nrm, bon, txc }
 
 	static const Vertex arr[] =
 	{
-		{ { 0.f, 0.f, 0.f },			{ 0.f, 0.f, 1.f },	{ 1.f, 0.f, 0.f, 0.f },	{ .5f, .5f } },
+		{ { 0.f, 0.f, 0.f }, { 0.f, 0.f, 1.f }, { 1.f, 0.f, 0.f, 0.f }, { .5f, .5f } },
 
 		// north sleeve
-		{ { bolen, 1.f * bolen, 0.f },	{ 0.f, 0.f, 1.f },	{ 1.f, 0.f, 0.f, 0.f },	{ .5f + .5f / 3.f, .5f + .5f / 3.f } },
-		{ {-bolen, 1.f * bolen, 0.f },	{ 0.f, 0.f, 1.f },	{ 1.f, 0.f, 0.f, 0.f },	{ .5f - .5f / 3.f, .5f + .5f / 3.f } },
-		{ { bolen, 2.f * bolen, 0.f },	{ 0.f, 0.f, 1.f },	{ 1.f, 0.f, 0.f, 2.f },	{ .5f + .5f / 3.f, .5f + 1.f / 3.f } },
-		{ {-bolen, 2.f * bolen, 0.f },	{ 0.f, 0.f, 1.f },	{ 1.f, 0.f, 0.f, 2.f },	{ .5f - .5f / 3.f, .5f + 1.f / 3.f } },
-		{ { bolen, 3.f * bolen, 0.f },	{ 0.f, 0.f, 1.f },	{ 1.f, 0.f, 0.f, 3.f },	{ .5f + .5f / 3.f, 1.f } },
-		{ {-bolen, 3.f * bolen, 0.f },	{ 0.f, 0.f, 1.f },	{ 1.f, 0.f, 0.f, 3.f },	{ .5f - .5f / 3.f, 1.f } },
+		{ { bolen, 1.f * bolen, 0.f }, { 0.f, 0.f, 1.f }, { 1.f, 0.f, 0.f, 0.f }, { .5f + .5f / 3.f, .5f + .5f / 3.f } },
+		{ {-bolen, 1.f * bolen, 0.f }, { 0.f, 0.f, 1.f }, { 1.f, 0.f, 0.f, 0.f }, { .5f - .5f / 3.f, .5f + .5f / 3.f } },
+		{ { bolen, 2.f * bolen, 0.f }, { 0.f, 0.f, 1.f }, { 1.f, 0.f, 0.f, 2.f }, { .5f + .5f / 3.f, .5f + 1.f / 3.f } },
+		{ {-bolen, 2.f * bolen, 0.f }, { 0.f, 0.f, 1.f }, { 1.f, 0.f, 0.f, 2.f }, { .5f - .5f / 3.f, .5f + 1.f / 3.f } },
+		{ { bolen, 3.f * bolen, 0.f }, { 0.f, 0.f, 1.f }, { 1.f, 0.f, 0.f, 3.f }, { .5f + .5f / 3.f, 1.f } },
+		{ {-bolen, 3.f * bolen, 0.f }, { 0.f, 0.f, 1.f }, { 1.f, 0.f, 0.f, 3.f }, { .5f - .5f / 3.f, 1.f } },
 
 		// south sleeve
-		{ { bolen, -1.f * bolen, 0.f },	{ 0.f, 0.f, 1.f },	{ 1.f, 0.f, 0.f, 0.f },	{ .5f + .5f / 3.f, .5f - .5f / 3.f } },
-		{ {-bolen, -1.f * bolen, 0.f },	{ 0.f, 0.f, 1.f },	{ 1.f, 0.f, 0.f, 0.f },	{ .5f - .5f / 3.f, .5f - .5f / 3.f } },
-		{ { bolen, -2.f * bolen, 0.f },	{ 0.f, 0.f, 1.f },	{ 1.f, 0.f, 0.f, 8.f },	{ .5f + .5f / 3.f, .5f - 1.f / 3.f } },
-		{ {-bolen, -2.f * bolen, 0.f },	{ 0.f, 0.f, 1.f },	{ 1.f, 0.f, 0.f, 8.f },	{ .5f - .5f / 3.f, .5f - 1.f / 3.f } },
-		{ { bolen, -3.f * bolen, 0.f },	{ 0.f, 0.f, 1.f },	{ 1.f, 0.f, 0.f, 9.f },	{ .5f + .5f / 3.f, 0.f } },
-		{ {-bolen, -3.f * bolen, 0.f },	{ 0.f, 0.f, 1.f },	{ 1.f, 0.f, 0.f, 9.f },	{ .5f - .5f / 3.f, 0.f } },
+		{ { bolen, -1.f * bolen, 0.f }, { 0.f, 0.f, 1.f }, { 1.f, 0.f, 0.f, 0.f }, { .5f + .5f / 3.f, .5f - .5f / 3.f } },
+		{ {-bolen, -1.f * bolen, 0.f }, { 0.f, 0.f, 1.f }, { 1.f, 0.f, 0.f, 0.f }, { .5f - .5f / 3.f, .5f - .5f / 3.f } },
+		{ { bolen, -2.f * bolen, 0.f }, { 0.f, 0.f, 1.f }, { 1.f, 0.f, 0.f, 8.f }, { .5f + .5f / 3.f, .5f - 1.f / 3.f } },
+		{ {-bolen, -2.f * bolen, 0.f }, { 0.f, 0.f, 1.f }, { 1.f, 0.f, 0.f, 8.f }, { .5f - .5f / 3.f, .5f - 1.f / 3.f } },
+		{ { bolen, -3.f * bolen, 0.f }, { 0.f, 0.f, 1.f }, { 1.f, 0.f, 0.f, 9.f }, { .5f + .5f / 3.f, 0.f } },
+		{ {-bolen, -3.f * bolen, 0.f }, { 0.f, 0.f, 1.f }, { 1.f, 0.f, 0.f, 9.f }, { .5f - .5f / 3.f, 0.f } },
 
 		// east sleeve
-		{ { 2.f * bolen,  bolen, 0.f },	{ 0.f, 0.f, 1.f },	{ 1.f, 0.f, 0.f, 11.f }, { .5f + 1.f / 3.f, .5f + .5f / 3.f } },
-		{ { 2.f * bolen, -bolen, 0.f },	{ 0.f, 0.f, 1.f },	{ 1.f, 0.f, 0.f, 11.f }, { .5f + 1.f / 3.f, .5f - .5f / 3.f } },
-		{ { 3.f * bolen,  bolen, 0.f },	{ 0.f, 0.f, 1.f },	{ 1.f, 0.f, 0.f, 12.f }, { 1.f,             .5f + .5f / 3.f } },
-		{ { 3.f * bolen, -bolen, 0.f },	{ 0.f, 0.f, 1.f },	{ 1.f, 0.f, 0.f, 12.f }, { 1.f,             .5f - .5f / 3.f } },
+		{ { 2.f * bolen,  bolen, 0.f }, { 0.f, 0.f, 1.f }, { 1.f, 0.f, 0.f, 11.f }, { .5f + 1.f / 3.f, .5f + .5f / 3.f } },
+		{ { 2.f * bolen, -bolen, 0.f }, { 0.f, 0.f, 1.f }, { 1.f, 0.f, 0.f, 11.f }, { .5f + 1.f / 3.f, .5f - .5f / 3.f } },
+		{ { 3.f * bolen,  bolen, 0.f }, { 0.f, 0.f, 1.f }, { 1.f, 0.f, 0.f, 12.f }, { 1.f,             .5f + .5f / 3.f } },
+		{ { 3.f * bolen, -bolen, 0.f }, { 0.f, 0.f, 1.f }, { 1.f, 0.f, 0.f, 12.f }, { 1.f,             .5f - .5f / 3.f } },
 
 		// west sleeve
-		{ {-2.f * bolen,  bolen, 0.f },	{ 0.f, 0.f, 1.f },	{ 1.f, 0.f, 0.f, 5.f },	{ .5f - 1.f / 3.f, .5f + .5f / 3.f } },
-		{ {-2.f * bolen, -bolen, 0.f },	{ 0.f, 0.f, 1.f },	{ 1.f, 0.f, 0.f, 5.f },	{ .5f - 1.f / 3.f, .5f - .5f / 3.f } },
-		{ {-3.f * bolen,  bolen, 0.f },	{ 0.f, 0.f, 1.f },	{ 1.f, 0.f, 0.f, 6.f },	{ 0.f,             .5f + .5f / 3.f } },
-		{ {-3.f * bolen, -bolen, 0.f },	{ 0.f, 0.f, 1.f },	{ 1.f, 0.f, 0.f, 6.f },	{ 0.f,             .5f - .5f / 3.f } }
+		{ {-2.f * bolen,  bolen, 0.f }, { 0.f, 0.f, 1.f }, { 1.f, 0.f, 0.f, 5.f }, { .5f - 1.f / 3.f, .5f + .5f / 3.f } },
+		{ {-2.f * bolen, -bolen, 0.f }, { 0.f, 0.f, 1.f }, { 1.f, 0.f, 0.f, 5.f }, { .5f - 1.f / 3.f, .5f - .5f / 3.f } },
+		{ {-3.f * bolen,  bolen, 0.f }, { 0.f, 0.f, 1.f }, { 1.f, 0.f, 0.f, 6.f }, { 0.f,             .5f + .5f / 3.f } },
+		{ {-3.f * bolen, -bolen, 0.f }, { 0.f, 0.f, 1.f }, { 1.f, 0.f, 0.f, 6.f }, { 0.f,             .5f - .5f / 3.f } }
 	};
 
 	static const uint16_t idx[][3] =
@@ -758,6 +772,9 @@ bool init_resources(
 	stream::cout << "number of vertices: " << num_verts <<
 		"\nnumber of indices: " << num_indes << '\n';
 
+	/////////////////////////////////////////////////////////////////
+	// reserve VAO (if available) and all necessary VBOs
+
 #if PLATFORM_GL_OES_vertex_array_object
 	glGenVertexArraysOES(sizeof(g_vao) / sizeof(g_vao[0]), g_vao);
 
@@ -772,6 +789,9 @@ bool init_resources(
 	for (unsigned i = 0; i < sizeof(g_vbo) / sizeof(g_vbo[0]); ++i)
 		assert(g_vbo[i]);
 
+	/////////////////////////////////////////////////////////////////
+	// bind VBOs and upload the geom asset
+
 	glBindBuffer(GL_ARRAY_BUFFER, g_vbo[VBO_SKIN_VTX]);
 	glBufferData(GL_ARRAY_BUFFER, sizeof(arr), arr, GL_STATIC_DRAW);
 
@@ -782,12 +802,18 @@ bool init_resources(
 
 	DEBUG_GL_ERR()
 
+	/////////////////////////////////////////////////////////////////
+	// set up the vertex attrib mapping for all attrib inputs
+
 	if (!setupVertexAttrPointers< Vertex >(g_active_attr_semantics[PROG_SKIN])) {
 		stream::cerr << __FUNCTION__ << " failed at setupVertexAttrPointers\n";
 		return false;
 	}
 
 #if PLATFORM_GL_OES_vertex_array_object
+	/////////////////////////////////////////////////////////////////
+	// if VAO: the final step of enabling the mapped attrib inputs
+
 	for (unsigned i = 0; i < g_active_attr_semantics[PROG_SKIN].num_active_attr; ++i)
 		glEnableVertexAttribArray(g_active_attr_semantics[PROG_SKIN].active_attr[i]);
 
@@ -796,6 +822,9 @@ bool init_resources(
 	glBindVertexArrayOES(0);
 
 #endif
+	/////////////////////////////////////////////////////////////////
+	// unbind the VBOs -- will be re-bound on a need-to-use basis
+
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 
@@ -860,14 +889,19 @@ bool render_frame()
 	if (!check_context(__FUNCTION__))
 		return false;
 
+	/////////////////////////////////////////////////////////////////
+	// clear the framebuffer (both color and depth)
+
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	/////////////////////////////////////////////////////////////////
+	// query about the viewport geometry; used for aspect
 
 	GLint vp[4];
 	glGetIntegerv(GL_VIEWPORT, vp);
 
 	/////////////////////////////////////////////////////////////////
+	// animate the skeleton for the given timestamp
 
 	static float anim = 0.f;
 
@@ -881,6 +915,7 @@ bool render_frame()
 	}
 
 	/////////////////////////////////////////////////////////////////
+	// produce mvp matrix
 
 	const simd::matx4 mv = simd::matx4(
 		1.f,  0.f,  0.f,  0.f,
@@ -906,6 +941,7 @@ bool render_frame()
 			mvp[3][0], mvp[3][1], mvp[3][2], mvp[3][3]);
 
 	/////////////////////////////////////////////////////////////////
+	// activate the shader program and set up all valid uniform vars
 
 	glUseProgram(g_shader_prog[PROG_SKIN]);
 
@@ -973,6 +1009,9 @@ bool render_frame()
 	glBindVertexArrayOES(g_vao[PROG_SKIN]);
 
 #else
+	/////////////////////////////////////////////////////////////////
+	// no VAO: re-bind the VBOs and enable all mapped vertex attribs
+
 	glBindBuffer(GL_ARRAY_BUFFER, g_vbo[VBO_SKIN_VTX]);
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, g_vbo[VBO_SKIN_IDX]);
 
@@ -982,11 +1021,17 @@ bool render_frame()
 	DEBUG_GL_ERR()
 
 #endif
+	/////////////////////////////////////////////////////////////////
+	// draw the geometry asset
+
 	glDrawElements(GL_TRIANGLES, g_num_faces[MESH_SKIN] * 3, GL_UNSIGNED_SHORT, (void*) 0);
 
 	DEBUG_GL_ERR()
 
 #if PLATFORM_GL_OES_vertex_array_object == 0
+	/////////////////////////////////////////////////////////////////
+	// no VAO: disable all mapped vertex attribs and unbind VBOs
+
 	for (unsigned i = 0; i < g_active_attr_semantics[PROG_SKIN].num_active_attr; ++i)
 		glDisableVertexAttribArray(g_active_attr_semantics[PROG_SKIN].active_attr[i]);
 

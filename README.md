@@ -14,17 +14,21 @@ Prerequisites
 
 The following Chromebrew packages are required:
 
-* buildessentials (a meta package that may or may not include some or all of the follwing packages at the time of reading)
+* buildessential (a meta package that may or may not include some or all of the follwing packages at the time of reading)
 * gcc7
 * llvm (optional up to R67, required from R68 onwards due to a limitation in the GNU linker from binutils package; see [Chromebrew ticket #2563](https://github.com/skycocker/chromebrew/issues/2563))
 * libwayland
+* wayland_protocols
+* linuxheaders
 * libpng
 
 
 How to Build
 ------------
 
-Running one of the `build_chromeos_xxx.sh` scripts in the source directiory builds the respective `test_egl_xxx` executable. Currently the compiler is hard-coded to clang++ and the linker to lld, so that building is R68-ready out of the box. To use the GNU linker and g++, partially comment-out the linker line like this:
+Before you can build any of the applications you have to run `build_wayland_protocols.sh` in the source directory in order to generate the code for the required auxiliary wayland protocols. It might be useful to repeat that step after every update of Chromebrew package `wayland_protocols`.
+
+Running one of the `build_chromeos_xxx.sh` scripts in the source directiory builds the respective `test_egl_xxx` executable. Currently the compiler is hard-coded to clang++ and the linker to lld, so that building is R68-ready out of the box. To use the GNU linker and g++, comment out `-fuse-ld` flag from `LFLAGS`:
 
 ```
 LFLAGS=(
@@ -34,11 +38,10 @@ LFLAGS=(
 	-ldl
 	-lEGL
 	-lGLESv2
-	-lpng16
 )
 
 ```
-And change the compiler found in the BUILD_CMD variable to g++.
+And change the compiler found in the `BUILD_CMD` variable to g++.
 
 
 Warnings & Tips
@@ -49,13 +52,10 @@ Please, take a moment to check the CLI options -- you will need them!
 usage: ./test_egl_sphere [<option> ...]
 options:
         -frames <unsigned_integer>              : set number of frames to run; default is max unsigned int
-        -screen <width> <height> <Hz>           : set fullscreen output of specified geometry and refresh
-        -bitness <r> <g> <b> <a>                : set EGL config of specified RGBA bitness; default is screen's bitness
-        -config_id <positive_integer>           : set EGL config of specified ID; overrides any other config options
+        -screen <width> <height> <Hz>           : set framebuffer of specified geometry and refresh
+        -bitness <r> <g> <b> <a>                : set framebuffer RGBA bitness; default is screen's bitness
         -fsaa <positive_integer>                : set fullscreen antialiasing; default is none
-        -grab_frame <unsigned_integer> <file>   : grab the Nth frame to file; index is zero-based
         -drawcalls <positive_integer>           : set number of drawcalls per frame; may be ignored by apps
-        -print_egl_configs                      : print available EGL configs
         -app <option> [<arguments>]             : app-specific option
 ```
 
@@ -69,15 +69,13 @@ The above:
 * Sets the EGL diagnostics envvar to 'warnings-only'.
 * Pins the app to the 3rd and 4th cores.
 * Specifies 2000 frames worth of runtime.
-* Specifies framebuffer pixel format of RGBA8888 (mandatory for now).
+* Specifies framebuffer pixel format of RGBA8888 (others supported are RGBA8880 and RGBA5650).
 * Specifies framebuffer geometry of 640x640x60Hz (refresh is required yet conveniently ignored).
 * Passes two app-specific options via the `-app` arguments.
 
 Please, note that:
 
 * Resizing at runtime, including switching to fullscreen, is not implemented yet.
-* Only drawables of 32-bit pixel formats and `EGL_SURFACE_TYPE` of `EGL_PBUFFER_BIT` work currently; any other configs may result in exceptionally slow output or EGL failing to initialize.
-* Due to a deficiency in the current EGL/Wayland bridging, the frame loop is quite CPU-intensive. On bigLITTLE ARM machines one might want to pin the app to the big cores.
 * If you need to see libEGL diagnostics/debug messages, set the `EGL_LOG_LEVEL` envvar to `debug`.
 
 References

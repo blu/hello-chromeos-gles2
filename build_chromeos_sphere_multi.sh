@@ -1,26 +1,33 @@
 #!/bin/bash
 
 TARGET=test_egl_sphere_multi
-SOURCE=(
+SOURCES_C=(
+	protocol/linux-dmabuf-protocol.c
+	egl_ext.c
+	gles_ext.c
+)
+SOURCES=(
 	main_chromeos.cpp
 	app_sphere_multi.cpp
 	util_tex.cpp
 	util_file.cpp
 	util_misc.cpp
-	gles_ext.cpp
 )
 CFLAGS=(
-	-std=c++11
-	-pipe
 	-fno-exceptions
 	-fno-rtti
 	-fstrict-aliasing
 	-Wreturn-type
 	-Wunused-variable
 	-Wunused-value
+	-Wno-incompatible-function-pointer-types
+	-DPLATFORM_EGL
 	-DPLATFORM_GLES
 	-DPLATFORM_GL_OES_vertex_array_object
+	-DPLATFORM_GL_KHR_debug
 	-I./khronos
+	-I./libdrm
+	-I./protocol
 )
 LFLAGS=(
 	-fuse-ld=lld
@@ -29,7 +36,6 @@ LFLAGS=(
 	-ldl
 	-lEGL
 	-lGLESv2
-	-lpng16
 )
 
 if [[ ${HOSTTYPE:0:3} == "arm" ]]; then
@@ -113,7 +119,6 @@ if [[ $1 == "debug" ]]; then
 		-O0
 		-g
 		-DDEBUG
-		-DPLATFORM_GL_KHR_debug
 	)
 else
 	CFLAGS+=(
@@ -124,6 +129,6 @@ else
 	)
 fi
 
-BUILD_CMD="./clang++.sh -o "${TARGET}" "${CFLAGS[@]}" "${SOURCE[@]}" "${LFLAGS[@]}
+BUILD_CMD="./clang++.sh -o "${TARGET}" -pipe "${CFLAGS[@]}" -x c++ "${SOURCES[@]}" -x c "${SOURCES_C[@]}" "${LFLAGS[@]}
 echo $BUILD_CMD
 $BUILD_CMD
