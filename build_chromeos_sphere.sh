@@ -2,7 +2,7 @@
 
 TARGET=test_egl_sphere
 SOURCES_C=(
-	linux-dmabuf-protocol.c
+	protocol/linux-dmabuf-protocol.c
 	egl_ext.c
 	gles_ext.c
 )
@@ -41,6 +41,7 @@ CFLAGS=(
 	-DPLATFORM_GL_KHR_debug
 	-I./khronos
 	-I./libdrm
+	-I./protocol
 )
 LFLAGS=(
 	-fuse-ld=lld
@@ -163,7 +164,8 @@ echo $BUILD_CMD_C
 $BUILD_CMD_C
 
 for file in ${SOURCES_C[@]}; do
-	SOURCES+=(${file%\.c}.o)
+	sans_dir=`basename ${file}`
+	SOURCES+=(${sans_dir%\.c}.o)
 done
 
 BUILD_CMD="./clang++.sh -o "${TARGET}" "${CFLAGS[@]}" "${SOURCES[@]}" "${LFLAGS[@]}

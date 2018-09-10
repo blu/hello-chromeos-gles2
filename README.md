@@ -14,15 +14,18 @@ Prerequisites
 
 The following Chromebrew packages are required:
 
-* buildessentials (a meta package that may or may not include some or all of the follwing packages at the time of reading)
+* buildessential (a meta package that may or may not include some or all of the follwing packages at the time of reading)
 * gcc7
 * llvm (optional up to R67, required from R68 onwards due to a limitation in the GNU linker from binutils package; see [Chromebrew ticket #2563](https://github.com/skycocker/chromebrew/issues/2563))
 * libwayland
+* wayland_protocols
 * libpng
 
 
 How to Build
 ------------
+
+Before you can build any of the applications you have to run `build_wayland_protocols.sh` in the source directory in order to generate the code for the required auxiliary wayland protocols. It might be useful to repeat that step after every update of Chromebrew package `wayland_protocols`.
 
 Running one of the `build_chromeos_xxx.sh` scripts in the source directiory builds the respective `test_egl_xxx` executable. Currently the compiler is hard-coded to clang++ and the linker to lld, so that building is R68-ready out of the box. To use the GNU linker and g++, partially comment-out the linker line like this:
 
