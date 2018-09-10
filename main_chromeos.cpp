@@ -462,49 +462,69 @@ os_create_anonymous_file(off_t size)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 struct DRMBuffer {
-	// DRM dumb-buffer-object properties
-	uint32_t handle;
-	uint32_t pitch;
-	uint64_t size;
-
-	// buffer-object PRIME file descriptor
-	int32_t dmabuf_fd;
+	// acquired properties of DRM buffer object
+	uint32_t handle;   // GEM handle
+	uint32_t pitch;    // row pitch in bytes
+	uint64_t size;     // total size in bytes
+	int32_t dmabuf_fd; // prime file descriptor
 
 	DRMBuffer()
 	: handle(0)
 	, pitch(0)
 	, size(0)
-	, dmabuf_fd(-1)
-	{
+	, dmabuf_fd(-1) {
 	}
 };
 
-struct EGL
-{
+template < typename T, size_t N >
+int8_t (& noneval_countof(const T (&)[N]))[N];
+
+#define countof(x) sizeof(noneval_countof(x))
+
+template < typename T, size_t N >
+void set_array(T (&arr)[N], const T val) {
+	for (size_t i = 0; i < N; ++i)
+		arr[i] = val;
+}
+
+template < bool >
+struct compiler_assert;
+
+template <>
+struct compiler_assert< true > {};
+
+
+struct EGL {
+	// general enablement
 	EGLDisplay display;
 	EGLContext context;
-	EGLImage image;
 
-	uint32_t window_w;
-	uint32_t window_h;
+	// primary framebuffer (double buffering)
+	EGLImage image[2];        // EGL image, per buffer
+	DRMBuffer primary_drm[2]; // DRM buffer object, per buffer
+	int32_t drm_fd;           // DRM device file descriptor
+	GLuint primary_rbo[4];    // framebuffer attachment names, per buffer
+	GLuint primary_fbo[2];    // framebuffer name, per buffer
 
-	// primary framebuffer
-	GLuint prime_rbo;
-	GLuint prime_fbo;
-	int32_t drm_fd;
-	DRMBuffer imageDRM;
+	uint32_t window_w;        // framebuffer (windowed) width
+	uint32_t window_h;        // framebuffer (windowed) height
 
 	EGL(uint32_t w,
 	    uint32_t h)
 	: display(EGL_NO_DISPLAY)
 	, context(EGL_NO_CONTEXT)
-	, image(EGL_NO_IMAGE_KHR)
+	, drm_fd(-1)
 	, window_w(w)
 	, window_h(h)
-	, prime_rbo(0)
-	, prime_fbo(0)
-	, drm_fd(-1)
 	{
+		const compiler_assert< countof(image) == countof(primary_drm) >     assert_countof_drm __attribute__ ((unused));
+		const compiler_assert< countof(image) == countof(primary_rbo) / 2 > assert_countof_rbo __attribute__ ((unused));
+		const compiler_assert< countof(image) == countof(primary_fbo) >     assert_countof_fbo __attribute__ ((unused));
+
+		set_array(image, EGL_NO_IMAGE_KHR);
+		set_array(primary_rbo, 0U);
+		set_array(primary_fbo, 0U);
+
 		init_egl_ext();
 		init_gles_ext();
 	}
@@ -842,10 +862,10 @@ bool EGL::initGLES2(
 	uint32_t fourcc = 0;
 	switch (nbits_r << 24 | nbits_g << 16 | nbits_b << 8 | nbits_a) {
 	case 0x08080808:
-		fourcc = DRM_FORMAT_ARGB8888;
+		fourcc = DRM_FORMAT_ABGR8888; // DRM_FORMAT_ARGB8888;
 		break;
 	case 0x08080800:
-		fourcc = DRM_FORMAT_XRGB8888;
+		fourcc = DRM_FORMAT_XBGR8888; // DRM_FORMAT_XRGB8888;
 		break;
 	case 0x05060500:
 		fourcc = DRM_FORMAT_RGB565;
@@ -866,22 +886,26 @@ bool EGL::initGLES2(
 		return false;
 	}
 
-	int ret = create_drm_dumb_bo(
-		drm_fd, window_w, window_h, nbits_pixel,
-		&imageDRM.handle,
-		&imageDRM.pitch,
-		&imageDRM.size);
+	for (size_t i = 0; i < countof(primary_drm); ++i) {
+		const int ret = create_drm_dumb_bo(
+			drm_fd, window_w, window_h, nbits_pixel,
+			&primary_drm[i].handle,
+			&primary_drm[i].pitch,
+			&primary_drm[i].size);
 
-	if (ret) {
-		stream::cerr << "could not allocate dumb buffer: " << strerror(ret) << " (" << ret << ")\n";
-		return false;
+		if (ret) {
+			stream::cerr << "could not allocate dumb buffer: " << strerror(ret) << '\n';
+			return false;
+		}
 	}
 
-	ret = create_drm_dmabuf(drm_fd, imageDRM.handle, &imageDRM.dmabuf_fd);
+	for (size_t i = 0; i < countof(primary_drm); ++i) {
+		const int ret = create_drm_dmabuf(drm_fd, primary_drm[i].handle, &primary_drm[i].dmabuf_fd);
 
-	if (ret) {
-		stream::cerr << "could not export buffer: " << strerror(ret) << " (" << ret << ")\n";
-		return false;
+		if (ret) {
+			stream::cerr << "could not export buffer: " << strerror(ret) << '\n';
+			return false;
+		}
 	}
 
 	display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
@@ -945,7 +969,7 @@ bool EGL::initGLES2(
 		return false;
 	}
 
-	const EGLint image_attr[] = {
+	EGLint image_attr[] = {
 		EGL_WIDTH,
 		EGLint(window_w),
 		EGL_HEIGHT,
@@ -953,23 +977,29 @@ bool EGL::initGLES2(
 		EGL_LINUX_DRM_FOURCC_EXT,
 		EGLint(fourcc),
 		EGL_DMA_BUF_PLANE0_FD_EXT,
-		EGLint(imageDRM.dmabuf_fd),
+		-1, // [7]
 		EGL_DMA_BUF_PLANE0_OFFSET_EXT,
 		EGLint(0),
 		EGL_DMA_BUF_PLANE0_PITCH_EXT,
-		EGLint(imageDRM.pitch),
+		-1, // [11]
 		EGL_NONE
 	};
-	image = eglCreateImageKHR(
-		display,
-		EGL_NO_CONTEXT,
-		EGL_LINUX_DMA_BUF_EXT,
-		EGLClientBuffer(NULL),
-		image_attr);
 
-	if (EGL_NO_IMAGE_KHR == image) {
-		stream::cerr << "eglCreateImage() failed\n";
-		return false;
+	for (size_t i = 0; i < countof(image); ++i) {
+		image_attr[ 7] = EGLint(primary_drm[i].dmabuf_fd);
+		image_attr[11] = EGLint(primary_drm[i].pitch);
+
+		image[i] = eglCreateImageKHR(
+			display,
+			EGL_NO_CONTEXT,
+			EGL_LINUX_DMA_BUF_EXT,
+			EGLClientBuffer(NULL),
+			image_attr);
+
+		if (EGL_NO_IMAGE_KHR == image[i]) {
+			stream::cerr << "eglCreateImage() failed\n";
+			return false;
+		}
 	}
 
 	if (EGL_FALSE == eglMakeCurrent(
@@ -983,37 +1013,59 @@ bool EGL::initGLES2(
 	}
 
 	// set the newly-acquired EGLimage as storage to our primary renderbuffer
-	glGenRenderbuffers(1, &prime_rbo);
-	assert(prime_rbo);
-	glBindRenderbuffer(GL_RENDERBUFFER, prime_rbo);
+	glGenRenderbuffers(countof(primary_rbo), primary_rbo);
+	glGenFramebuffers(countof(primary_fbo), primary_fbo);
 
-	DEBUG_GL_ERR()
+	for (size_t i = 0; i < countof(image); ++i) {
+		glBindRenderbuffer(GL_RENDERBUFFER, primary_rbo[i]);
+		glEGLImageTargetRenderbufferStorageOES(GL_RENDERBUFFER, image[i]);
 
-	glEGLImageTargetRenderbufferStorageOES(GL_RENDERBUFFER, image);
-
-	DEBUG_GL_ERR()
-
-	glGenFramebuffers(1, &prime_fbo);
-	assert(prime_fbo);
-	glBindFramebuffer(GL_FRAMEBUFFER, prime_fbo);
-
-	DEBUG_GL_ERR()
-
-	glFramebufferRenderbuffer(
-		GL_FRAMEBUFFER,
-		GL_COLOR_ATTACHMENT0,
-		GL_RENDERBUFFER,
-		prime_rbo);
-
-	DEBUG_GL_ERR()
-
-	const GLenum fbo_success = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-
-	if (GL_FRAMEBUFFER_COMPLETE != fbo_success) {
-		stream::cerr << __FUNCTION__ << " failed at glCheckFramebufferStatus\n";
-		return false;
+		DEBUG_GL_ERR()
 	}
 
+	const bool requires_depth = hook::requires_depth();
+
+	if (requires_depth) {
+		for (size_t i = 0; i < countof(image); ++i) {
+			glBindRenderbuffer(GL_RENDERBUFFER, primary_rbo[countof(image) + i]);
+			glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8_OES, window_w, window_h);
+
+			DEBUG_GL_ERR()
+		}
+	}
+
+	glBindRenderbuffer(GL_RENDERBUFFER, 0);
+
+	for (size_t i = 0; i < countof(image); ++i) {
+		glBindFramebuffer(GL_FRAMEBUFFER, primary_fbo[i]);
+		glFramebufferRenderbuffer(
+			GL_FRAMEBUFFER,
+			GL_COLOR_ATTACHMENT0,
+			GL_RENDERBUFFER,
+			primary_rbo[i]);
+
+		if (requires_depth) {
+			glFramebufferRenderbuffer(
+				GL_FRAMEBUFFER,
+				GL_DEPTH_ATTACHMENT,
+				GL_RENDERBUFFER,
+				primary_rbo[countof(image) + i]);
+			glFramebufferRenderbuffer(
+				GL_FRAMEBUFFER,
+				GL_STENCIL_ATTACHMENT,
+				GL_RENDERBUFFER,
+				primary_rbo[countof(image) + i]);
+		}
+
+		const GLenum fbo_success = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+
+		if (GL_FRAMEBUFFER_COMPLETE != fbo_success) {
+			stream::cerr << "glCheckFramebufferStatus() failed\n";
+			return false;
+		}
+	}
+
+	glBindFramebuffer(GL_FRAMEBUFFER, primary_fbo[0]);
 	glViewport(0, 0, window_w, window_h);
 
 	deinit_self.reset();
@@ -1023,31 +1075,37 @@ bool EGL::initGLES2(
 
 void EGL::deinit()
 {
-	if (0 != prime_fbo) {
-		glDeleteFramebuffers(1, &prime_fbo);
-		prime_fbo = 0;
+	if (0 != primary_fbo[0]) {
+		glDeleteFramebuffers(countof(primary_fbo), primary_fbo);
+		set_array(primary_fbo, 0U);
 	}
 
-	if (0 != prime_rbo) {
-		glDeleteRenderbuffers(1, &prime_rbo);
-		prime_rbo = 0;
+	if (0 != primary_rbo[0]) {
+		glDeleteRenderbuffers(countof(primary_rbo), primary_rbo);
+		set_array(primary_rbo, 0U);
 	}
 
-	if (EGL_NO_IMAGE_KHR != image) {
-		eglDestroyImageKHR(display, image);
-		image = EGL_NO_IMAGE_KHR;
+	for (size_t i = 0; i < countof(image); ++i) {
+		if (EGL_NO_IMAGE_KHR == image[i])
+			continue;
+		eglDestroyImageKHR(display, image[i]);
+		image[i] = EGL_NO_IMAGE_KHR;
 	}
 
-	if (-1 != imageDRM.dmabuf_fd) {
-		close(imageDRM.dmabuf_fd);
-		imageDRM.dmabuf_fd = -1;
+	for (size_t i = 0; i < countof(primary_drm); ++i) {
+		if (-1 == primary_drm[i].dmabuf_fd)
+			continue;
+		close(primary_drm[i].dmabuf_fd);
+		primary_drm[i].dmabuf_fd = -1;
 	}
 
-	if (0 != imageDRM.handle) {
-		destroy_drm_dumb_bo(drm_fd, imageDRM.handle);
-		imageDRM.handle = 0;
-		imageDRM.pitch = 0;
-		imageDRM.size = 0;
+	for (size_t i = 0; i < countof(primary_drm); ++i) {
+		if (0 == primary_drm[i].handle)
+			continue;
+		destroy_drm_dumb_bo(drm_fd, primary_drm[i].handle);
+		primary_drm[i].handle = 0;
+		primary_drm[i].pitch = 0;
+		primary_drm[i].size = 0;
 	}
 
 	if (-1 != drm_fd) {
