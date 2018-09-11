@@ -842,33 +842,37 @@ bool EGL::initGLES2(
 	using util::scoped_ptr;
 	using util::scoped_functor;
 
-	const unsigned nbits_r = bitness[0];
-	const unsigned nbits_g = bitness[1];
-	const unsigned nbits_b = bitness[2];
-	const unsigned nbits_a = bitness[3];
-	const unsigned nbits_pixel =
+	const uint32_t nbits_r = bitness[0];
+	const uint32_t nbits_g = bitness[1];
+	const uint32_t nbits_b = bitness[2];
+	const uint32_t nbits_a = bitness[3];
+	const uint32_t nbits_depth =
 		nbits_r +
 		nbits_g +
 		nbits_b +
-		nbits_a + 7 & ~7;
+		nbits_a;
 
-	if (0 == nbits_pixel) {
-		stream::cerr << "nil pixel size requested; abort\n";
+	if (0 == nbits_depth) {
+		stream::cerr << "nil pixel depth requested; abort\n";
 		return false;
 	}
 
 	deinit();
 
 	uint32_t fourcc = 0;
+	uint32_t bpp = 0;
 	switch (nbits_r << 24 | nbits_g << 16 | nbits_b << 8 | nbits_a) {
 	case 0x08080808:
 		fourcc = DRM_FORMAT_ABGR8888; // DRM_FORMAT_ARGB8888;
+		bpp = 32;
 		break;
 	case 0x08080800:
 		fourcc = DRM_FORMAT_XBGR8888; // DRM_FORMAT_XRGB8888;
+		bpp = 32;
 		break;
 	case 0x05060500:
 		fourcc = DRM_FORMAT_RGB565;
+		bpp = 16;
 		break;
 	}
 
@@ -888,7 +892,7 @@ bool EGL::initGLES2(
 
 	for (size_t i = 0; i < countof(primary_drm); ++i) {
 		const int ret = create_drm_dumb_bo(
-			drm_fd, window_w, window_h, nbits_pixel,
+			drm_fd, window_w, window_h, bpp,
 			&primary_drm[i].handle,
 			&primary_drm[i].pitch,
 			&primary_drm[i].size);

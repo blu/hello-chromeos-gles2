@@ -52,13 +52,11 @@ Please, take a moment to check the CLI options -- you will need them!
 usage: ./test_egl_sphere [<option> ...]
 options:
         -frames <unsigned_integer>              : set number of frames to run; default is max unsigned int
-        -screen <width> <height> <Hz>           : set fullscreen output of specified geometry and refresh
-        -bitness <r> <g> <b> <a>                : set EGL config of specified RGBA bitness; default is screen's bitness
-        -config_id <positive_integer>           : set EGL config of specified ID; overrides any other config options
+        -screen <width> <height> <Hz>           : set framebuffer of specified geometry and refresh
+        -bitness <r> <g> <b> <a>                : set framebuffer RGBA bitness; default is screen's bitness
         -fsaa <positive_integer>                : set fullscreen antialiasing; default is none
         -grab_frame <unsigned_integer> <file>   : grab the Nth frame to file; index is zero-based
         -drawcalls <positive_integer>           : set number of drawcalls per frame; may be ignored by apps
-        -print_egl_configs                      : print available EGL configs
         -app <option> [<arguments>]             : app-specific option
 ```
 
@@ -79,8 +77,8 @@ The above:
 Please, note that:
 
 * Resizing at runtime, including switching to fullscreen, is not implemented yet.
-* Only drawables of 32-bit pixel formats and `EGL_SURFACE_TYPE` of `EGL_PBUFFER_BIT` work currently; any other configs may result in exceptionally slow output or EGL failing to initialize.
-* Due to a deficiency in the current EGL/Wayland bridging, the frame loop is quite CPU-intensive. On bigLITTLE ARM machines one might want to pin the app to the big cores.
+* Only 32-bit framebuffer pixel formats work currently; any other formats may result in exceptionally slow output.
+* Due to a deficiency in the current EGL/Wayland bridging the frame loop is quite CPU-intensive. On bigLITTLE ARM machines one might want to pin the app to the big cores via `taskset`.
 * If you need to see libEGL diagnostics/debug messages, set the `EGL_LOG_LEVEL` envvar to `debug`.
 
 References
