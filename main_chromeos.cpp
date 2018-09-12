@@ -22,11 +22,6 @@
 #include <sstream>
 #include <iomanip>
 
-#include <png.h>
-#ifndef Z_BEST_COMPRESSION
-#define Z_BEST_COMPRESSION 9
-#endif
-
 #include "stream.hpp"
 #include "util_file.hpp"
 #include "util_misc.hpp"
@@ -79,7 +74,6 @@ const char arg_nframes[]       = "frames";
 const char arg_screen[]        = "screen";
 const char arg_bitness[]       = "bitness";
 const char arg_fsaa[]          = "fsaa";
-const char arg_grab[]          = "grab_frame";
 const char arg_drawcalls[]     = "drawcalls";
 
 #define FULLSCREEN_WIDTH 1366
@@ -846,16 +840,6 @@ bool EGL::initGLES2(
 	const uint32_t nbits_g = bitness[1];
 	const uint32_t nbits_b = bitness[2];
 	const uint32_t nbits_a = bitness[3];
-	const uint32_t nbits_depth =
-		nbits_r +
-		nbits_g +
-		nbits_b +
-		nbits_a;
-
-	if (0 == nbits_depth) {
-		stream::cerr << "nil pixel depth requested; abort\n";
-		return false;
-	}
 
 	deinit();
 
@@ -1186,115 +1170,6 @@ reportGLCaps()
 	return true;
 }
 
-enum IMAGE_FORMAT {
-	IMAGE_FORMAT_GRAY,
-	IMAGE_FORMAT_RGB,
-	IMAGE_FORMAT_RGBX
-};
-
-static bool
-write_png(
-	const IMAGE_FORMAT src_format,
-	const unsigned w,
-	const unsigned h,
-	void* const bits,
-	FILE* const fp)
-{
-	using util::scoped_ptr;
-	using util::generic_free;
-
-	size_t pixel_size;
-	int color_type;
-
-	switch (src_format) {
-	case IMAGE_FORMAT_GRAY:
-		pixel_size = sizeof(png_byte);
-		color_type = PNG_COLOR_TYPE_GRAY;
-		break;
-	case IMAGE_FORMAT_RGB:
-		pixel_size = sizeof(png_byte[3]);
-		color_type = PNG_COLOR_TYPE_RGB;
-		break;
-	case IMAGE_FORMAT_RGBX:
-		pixel_size = sizeof(png_byte[4]);
-		color_type = PNG_COLOR_TYPE_RGB;
-		break;
-	default: // unknown src format
-		return false;
-	}
-
-	png_structp png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
-
-	if (!png_ptr)
-		return false;
-
-	png_infop info_ptr = png_create_info_struct(png_ptr);
-
-	if (!info_ptr) {
-		png_destroy_write_struct(&png_ptr, (png_infopp) NULL);
-		return false;
-	}
-
-	// declare any RAII before the longjump, lest no destruction at longjump
-	const scoped_ptr< png_bytep, generic_free > row((png_bytepp) malloc(sizeof(png_bytep) * h));
-
-	if (setjmp(png_jmpbuf(png_ptr))) {
-		png_destroy_write_struct(&png_ptr, &info_ptr);
-		return false;
-	}
-
-	for (size_t i = 0; i < h; ++i)
-		row()[i] = (png_bytep) bits + w * (h - 1 - i) * pixel_size;
-
-	png_init_io(png_ptr, fp);
-	png_set_compression_level(png_ptr, Z_BEST_COMPRESSION);
-	png_set_IHDR(png_ptr, info_ptr, w, h, 8, color_type, PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
-	png_write_info(png_ptr, info_ptr);
-	if (IMAGE_FORMAT_RGBX == src_format)
-		png_set_filler(png_ptr, 0, PNG_FILLER_AFTER);
-	png_write_image(png_ptr, row());
-	png_write_end(png_ptr, info_ptr);
-
-	png_destroy_write_struct(&png_ptr, &info_ptr);
-	return true;
-}
-
-
-static bool
-saveFramebuffer(
-	const unsigned window_w,
-	const unsigned window_h,
-	const char* name)
-{
-	assert(NULL != name);
-
-	using util::scoped_ptr;
-	using util::generic_free;
-	using util::scoped_functor;
-
-	stream::cout << "saving framegrab as '" << name << "'\n";
-
-	scoped_ptr< FILE, scoped_functor > file(fopen(name, "wb"));
-
-	if (0 == file()) {
-		stream::cerr << "failure opening framegrab file '" << name << "'\n";
-		return false;
-	}
-
-	const size_t pixel_size = sizeof(GLubyte[4]);
-	const size_t frame_size = window_h * window_w * pixel_size;
-	const scoped_ptr< GLvoid, generic_free > pixels(malloc(frame_size));
-
-	glReadPixels(0, 0, window_w, window_h, GL_RGBA, GL_UNSIGNED_BYTE, pixels());
-
-	if (!write_png(IMAGE_FORMAT_RGBX, window_w, window_h, pixels(), file())) {
-		stream::cerr << "failure writing framegrab file '" << name << "'\n";
-		return false;
-	}
-
-	return true;
-}
-
 static bool
 validate_fullscreen(
 	const char* string_w,
@@ -1378,8 +1253,6 @@ struct Param {
 	unsigned fsaa;          // fsaa number of samples
 	unsigned frames;        // frames to run
 	unsigned drawcalls;     // repeated drawcalls
-	unsigned grab_frame;    // frame to grab
-	const char* grab_filename;
 };
 
 static int
@@ -1438,15 +1311,6 @@ parse_cli(const int argc, char** const argv, struct Param& param)
 			continue;
 		}
 
-		if (i + 2 < argc && !strcmp(argv[i] + prefix_len, arg_grab)) {
-			if (1 != sscanf(argv[i + 1], "%u", &param.grab_frame))
-				cli_err = true;
-
-			param.grab_filename = argv[i + 2];
-			i += 2;
-			continue;
-		}
-
 		if (i + 1 < argc && !strcmp(argv[i] + prefix_len, arg_drawcalls)) {
 			if (1 != sscanf(argv[i + 1], "%u", &param.drawcalls) || !param.drawcalls)
 				cli_err = true;
@@ -1469,8 +1333,6 @@ parse_cli(const int argc, char** const argv, struct Param& param)
 			" <r> <g> <b> <a>\t\t: set EGL config of specified RGBA bitness; default is screen's bitness\n"
 			"\t" << util::arg_prefix << arg_fsaa <<
 			" <positive_integer>\t\t: set fullscreen antialiasing; default is none\n"
-			"\t" << util::arg_prefix << arg_grab <<
-			" <unsigned_integer> <file>\t: grab the Nth frame to file; index is zero-based\n"
 			"\t" << util::arg_prefix << arg_drawcalls <<
 			" <positive_integer>\t\t: set number of drawcalls per frame; may be ignored by apps\n"
 			"\t" << util::arg_prefix << util::arg_app <<
@@ -1501,8 +1363,6 @@ int main(
 	param.fsaa = 0;
 	param.frames = -1U;
 	param.drawcalls = 0;
-	param.grab_frame = -1U;
-	param.grab_filename = NULL;
 
 	if (parse_cli(argc, argv, param))
 		return EXIT_FAILURE;
@@ -1513,8 +1373,6 @@ int main(
 	const unsigned fsaa            = param.fsaa;
 	const unsigned frames          = param.frames;
 	const unsigned drawcalls       = param.drawcalls;
-	const unsigned grab_frame      = param.grab_frame;
-	const char* grab_filename      = param.grab_filename;
 
 	if (drawcalls && !hook::set_num_drawcalls(drawcalls))
 		stream::cerr << "drawcalls argument ignored by app\n";

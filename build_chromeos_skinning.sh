@@ -37,7 +37,6 @@ LFLAGS=(
 	-ldl
 	-lEGL
 	-lGLESv2
-	-lpng16
 )
 
 if [[ ${HOSTTYPE:0:3} == "arm" ]]; then

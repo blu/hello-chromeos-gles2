@@ -19,6 +19,7 @@ The following Chromebrew packages are required:
 * llvm (optional up to R67, required from R68 onwards due to a limitation in the GNU linker from binutils package; see [Chromebrew ticket #2563](https://github.com/skycocker/chromebrew/issues/2563))
 * libwayland
 * wayland_protocols
+* linuxheaders
 * libpng
 
 
@@ -37,7 +38,6 @@ LFLAGS=(
 	-ldl
 	-lEGL
 	-lGLESv2
-	-lpng16
 )
 
 ```
@@ -55,7 +55,6 @@ options:
         -screen <width> <height> <Hz>           : set framebuffer of specified geometry and refresh
         -bitness <r> <g> <b> <a>                : set framebuffer RGBA bitness; default is screen's bitness
         -fsaa <positive_integer>                : set fullscreen antialiasing; default is none
-        -grab_frame <unsigned_integer> <file>   : grab the Nth frame to file; index is zero-based
         -drawcalls <positive_integer>           : set number of drawcalls per frame; may be ignored by apps
         -app <option> [<arguments>]             : app-specific option
 ```
