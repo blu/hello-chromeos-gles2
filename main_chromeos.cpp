@@ -836,12 +836,12 @@ bool EGL::initGLES2(
 	using util::scoped_ptr;
 	using util::scoped_functor;
 
+	deinit();
+
 	const uint32_t nbits_r = bitness[0];
 	const uint32_t nbits_g = bitness[1];
 	const uint32_t nbits_b = bitness[2];
 	const uint32_t nbits_a = bitness[3];
-
-	deinit();
 
 	uint32_t fourcc = 0;
 	uint32_t bpp = 0;
@@ -1356,10 +1356,10 @@ int main(
 	param.flags = 0;
 	param.image_w = 512;
 	param.image_h = 512;
-	param.bitness[0] = 0;
-	param.bitness[1] = 0;
-	param.bitness[2] = 0;
-	param.bitness[3] = 0;
+	param.bitness[0] = 8;
+	param.bitness[1] = 8;
+	param.bitness[2] = 8;
+	param.bitness[3] = 8;
 	param.fsaa = 0;
 	param.frames = -1U;
 	param.drawcalls = 0;
