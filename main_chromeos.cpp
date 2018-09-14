@@ -259,11 +259,12 @@ void shell_surface_configure(void *data, wl_shell_surface *shell_surface, uint32
 	// both times we get passed the final-target width and height
 	// on resize-to-windowed we get called back once;
 
-#if 0 // TODO
-	curr_width = width;
-	curr_height = height;
+#if DEBUG
+	fprintf(stderr, "%s, %d, %d -> %d, %d\n", __FUNCTION__, curr_width, curr_height, width, height);
 
 #endif
+	curr_width = width;
+	curr_height = height;
 }
 
 const wl_shell_surface_listener shell_surface_listener = {
@@ -764,7 +765,7 @@ bool EGL::initGLES2(
 
 	for (size_t i = 0; i < countof(primary_drm); ++i) {
 		const int ret = create_drm_dumb_bo(
-			drm_fd, window_w, window_h, bpp,
+			drm_fd, FULLSCREEN_WIDTH, FULLSCREEN_HEIGHT, bpp,
 			&primary_drm[i].handle,
 			&primary_drm[i].pitch,
 			&primary_drm[i].size);
@@ -847,9 +848,9 @@ bool EGL::initGLES2(
 
 	EGLint image_attr[] = {
 		EGL_WIDTH,
-		EGLint(window_w),
+		EGLint(FULLSCREEN_WIDTH),
 		EGL_HEIGHT,
-		EGLint(window_h),
+		EGLint(FULLSCREEN_HEIGHT),
 		EGL_LINUX_DRM_FOURCC_EXT,
 		EGLint(fourcc),
 		EGL_DMA_BUF_PLANE0_FD_EXT,
@@ -904,7 +905,7 @@ bool EGL::initGLES2(
 	if (requires_depth) {
 		for (size_t i = 0; i < countof(image); ++i) {
 			glBindRenderbuffer(GL_RENDERBUFFER, primary_rbo[countof(image) + i]);
-			glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8_OES, window_w, window_h);
+			glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8_OES, FULLSCREEN_WIDTH, FULLSCREEN_HEIGHT);
 
 			DEBUG_GL_ERR()
 		}
@@ -1303,7 +1304,8 @@ int main(
 			egl.primary_drm[i].dmabuf_fd,
 			egl.primary_drm[i].pitch,
 			egl.fourcc,
-			image_w, image_h);
+			FULLSCREEN_WIDTH,
+			FULLSCREEN_HEIGHT);
 	}
 
 	// start in windowed mode
