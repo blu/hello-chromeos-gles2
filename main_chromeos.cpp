@@ -49,8 +49,7 @@ const char arg_prefix[] = "-";
 const char arg_app[]    = "app";
 
 template < typename T >
-class generic_free
-{
+class generic_free {
 public:
 	void operator()(T* arg) {
 		free(arg);
@@ -58,8 +57,7 @@ public:
 };
 
 template <>
-class scoped_functor< FILE >
-{
+class scoped_functor< FILE > {
 public:
 	void operator()(FILE* arg) {
 		fclose(arg);
@@ -79,22 +77,17 @@ const char arg_drawcalls[]     = "drawcalls";
 #define FULLSCREEN_WIDTH 1366
 #define FULLSCREEN_HEIGHT 768
 
-typedef uint32_t pixel_t;
-
-wl_compositor *compositor;
 wl_display *display;
-wl_shell *shell;
-wl_shm *shm;
-wl_buffer *bufferW;
-wl_buffer *bufferF;
+wl_compositor *compositor;
 zwp_linux_dmabuf_v1 *dmabuf;
+wl_shell *shell;
+wl_buffer *buffer[2];
+GLuint primary_fbo[2];
 
 bool frame_error;
 uint32_t frames_done;
 int32_t curr_width;
 int32_t curr_height;
-
-void bind_buffer(wl_buffer *buffer, wl_shell_surface *shell_surface);
 
 void registry_global(void *data, wl_registry *registry, uint32_t name, const char *interface, uint32_t version);
 void registry_global_remove(void *, wl_registry *, uint32_t);
@@ -125,18 +118,21 @@ int setup_wayland(void)
 void cleanup_wayland(void)
 {
 	wl_shell_destroy(shell);
-	wl_shm_destroy(shm);
+	zwp_linux_dmabuf_v1_destroy(dmabuf);
 	wl_compositor_destroy(compositor);
 	wl_display_disconnect(display);
 }
 
 static void
 dmabuf_format(void *data, struct zwp_linux_dmabuf_v1 *zwp_linux_dmabuf, uint32_t format) {
+#if DEBUG
 	fprintf(stderr, "%s, 0x%08x, %c%c%c%c\n", __FUNCTION__, format,
 		char(format >>  0),
 		char(format >>  8),
 		char(format >> 16),
 		char(format >> 24));
+
+#endif
 }
 
 static void
@@ -157,8 +153,6 @@ void registry_global(void *data, wl_registry *registry, uint32_t name, const cha
 #endif
 	if (strcmp(interface, wl_compositor_interface.name) == 0)
 		compositor = static_cast< wl_compositor* >(wl_registry_bind(registry, name, &wl_compositor_interface, 3));
-	else if (strcmp(interface, wl_shm_interface.name) == 0)
-		shm = static_cast< wl_shm* >(wl_registry_bind(registry, name, &wl_shm_interface, 1));
 	else if (strcmp(interface, zwp_linux_dmabuf_v1_interface.name) == 0) {
 		dmabuf = static_cast< zwp_linux_dmabuf_v1* >(wl_registry_bind(registry, name, &zwp_linux_dmabuf_v1_interface, 2));
 		zwp_linux_dmabuf_v1_add_listener(dmabuf, &dmabuf_listener, data);
@@ -170,82 +164,82 @@ void registry_global(void *data, wl_registry *registry, uint32_t name, const cha
 void registry_global_remove(void *, wl_registry *, uint32_t) {
 }
 
-struct pool_data {
-	int fd;
-	pixel_t *memory;
-	unsigned capacity;
-	unsigned size;
+static void
+buffer_release(void *data, struct wl_buffer *buffer)
+{
+#if DEBUG
+	fprintf(stderr, "%s, %p\n", __FUNCTION__, data);
+
+#endif
+}
+
+static const struct wl_buffer_listener buffer_listener = {
+	.release = buffer_release
 };
 
-wl_shm_pool *create_memory_pool(int file)
+static void
+create_succeeded(void *data,
+	struct zwp_linux_buffer_params_v1 *params,
+	struct wl_buffer *new_buffer)
 {
-	pool_data *data;
-	wl_shm_pool *pool;
-	struct stat stat;
+	wl_buffer_add_listener(new_buffer, &buffer_listener, data);
+	zwp_linux_buffer_params_v1_destroy(params);
 
-	if (fstat(file, &stat) != 0)
-		return NULL;
-
-	data = static_cast< pool_data* >(malloc(sizeof(*data)));
-
-	if (data == NULL)
-		return NULL;
-
-	data->capacity = stat.st_size;
-	data->size = 0;
-	data->fd = file;
-
-	data->memory = static_cast< pixel_t* >(mmap(0, data->capacity,
-		PROT_READ | PROT_WRITE, MAP_SHARED, data->fd, 0));
-
-	if (data->memory == MAP_FAILED)
-		goto cleanup_alloc;
-
-	pool = wl_shm_create_pool(shm, data->fd, data->capacity);
-
-	if (pool == NULL)
-		goto cleanup_mmap;
-
-	wl_shm_pool_set_user_data(pool, data);
-
-	return pool;
-
-cleanup_mmap:
-	munmap(data->memory, data->capacity);
-
-cleanup_alloc:
-	free(data);
-	return NULL;
+	fprintf(stderr, "Success: zwp_linux_buffer_params.create succeeded.\n");
 }
 
-void free_memory_pool(wl_shm_pool *pool)
+static void
+create_failed(void *data, struct zwp_linux_buffer_params_v1 *params)
 {
-	pool_data *data;
+	zwp_linux_buffer_params_v1_destroy(params);
 
-	data = static_cast< pool_data* >(wl_shm_pool_get_user_data(pool));
-	wl_shm_pool_destroy(pool);
-	munmap(data->memory, data->capacity);
-	free(data);
+	fprintf(stderr, "Error: zwp_linux_buffer_params.create failed.\n");
 }
 
-wl_buffer *create_buffer(wl_shm_pool *pool, unsigned width, unsigned height)
+static const struct zwp_linux_buffer_params_v1_listener params_listener = {
+	.created = create_succeeded,
+	.failed = create_failed
+};
+
+static wl_buffer *create_buffer_dmabuf(
+	int32_t dmabuf_fd,
+	uint32_t dmabuf_stride,
+	uint32_t dmabuf_format,
+	uint32_t width,
+	uint32_t height)
 {
-	pool_data *data;
-	wl_buffer *buffer;
+	uint32_t flags = 0; // TODO: ZWP_LINUX_BUFFER_PARAMS_V1_FLAGS_Y_INVERT gets rejected by the server
+	struct zwp_linux_buffer_params_v1 *params;
+	struct wl_buffer *buffer;
 
-	data = static_cast< pool_data* >(wl_shm_pool_get_user_data(pool));
-	if (data->capacity < data->size + width * height * sizeof(pixel_t))
-		return NULL;
+	params = zwp_linux_dmabuf_v1_create_params(dmabuf);
+	zwp_linux_buffer_params_v1_add(params,
+	                   dmabuf_fd,
+	                   0, // plane_idx
+	                   0, // offset
+	                   dmabuf_stride,
+	                   0, // modifier_hi
+	                   0); // modifier_lo
 
-	buffer = wl_shm_pool_create_buffer(pool, data->size, width, height,
-		width * sizeof(pixel_t), WL_SHM_FORMAT_ABGR8888);
+	zwp_linux_buffer_params_v1_add_listener(params, &params_listener, NULL);
 
-	if (buffer == NULL)
-		return NULL;
+#if 1
+	buffer = zwp_linux_buffer_params_v1_create_immed(params,
+		width,
+		height,
+		dmabuf_format,
+		flags);
 
-	wl_buffer_set_user_data(buffer, (void*)((uintptr_t) data->memory + data->size));
-	data->size += width * height * sizeof(pixel_t);
+	wl_buffer_add_listener(buffer, &buffer_listener, NULL);
 
+#else
+	zwp_linux_buffer_params_v1_create(params,
+		width,
+		height,
+		dmabuf_format,
+		flags);
+
+#endif
 	return buffer;
 }
 
@@ -264,21 +258,12 @@ void shell_surface_configure(void *data, wl_shell_surface *shell_surface, uint32
 	// on resize-to-fullscreen we get called back twice: once at the start of transition, and once at the end of transition;
 	// both times we get passed the final-target width and height
 	// on resize-to-windowed we get called back once;
-	// handle both scenarios symmetrically by binding the corresponding buffer at first call
-	const int was_fullscreen = FULLSCREEN_WIDTH == curr_width && FULLSCREEN_HEIGHT == curr_height;
-	const int now_fullscreen = FULLSCREEN_WIDTH == width && FULLSCREEN_HEIGHT == height;
 
+#if 0 // TODO
 	curr_width = width;
 	curr_height = height;
 
-	switch (was_fullscreen * 2 + now_fullscreen) {
-	case 1: // was_fullscreen: 0, now_fullscreen: 1
-		bind_buffer(bufferF, shell_surface);
-		break;
-	case 2: // was_fullscreen: 1, now_fullscreen: 0
-		bind_buffer(bufferW, shell_surface);
-		break;
-	}
+#endif
 }
 
 const wl_shell_surface_listener shell_surface_listener = {
@@ -305,19 +290,18 @@ void redraw(void *data, wl_callback *callback, uint32_t time)
 	wl_surface *surface = static_cast< wl_surface* >(data);
 	set_frame_listener(surface);
 
-	// copy a frame from the EGL surface into the wayland surface buffer; note
-	// that glReadPixels is a serializing op that will wait for GLES to finish
-	void *pixels = wl_buffer_get_user_data(bufferW);
-	glReadPixels(0, 0, curr_width, curr_height, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
-
 	// update wayland surface and trigger the corresponding screen update
-	wl_surface_attach(surface, bufferW, 0, 0);
+	wl_surface_attach(surface, buffer[frames_done & 1], 0, 0);
 	wl_surface_damage(surface, 0, 0, curr_width, curr_height);
 	wl_surface_commit(surface);
 
 	// emit app's next frame
-	frame_error = !hook::render_frame();
 	frames_done += 1;
+
+	glBindFramebuffer(GL_FRAMEBUFFER, primary_fbo[frames_done & 1]);
+	glViewport(0, 0, curr_width, curr_height);
+
+	frame_error = !hook::render_frame();
 }
 
 wl_shell_surface *create_surface(void)
@@ -351,102 +335,6 @@ void free_surface(wl_shell_surface *shell_surface)
 
 	wl_shell_surface_destroy(shell_surface);
 	wl_surface_destroy(surface);
-}
-
-void bind_buffer(wl_buffer *buffer, wl_shell_surface *shell_surface)
-{
-	wl_surface *surface = static_cast< wl_surface* >(wl_shell_surface_get_user_data(shell_surface));
-
-	wl_surface_attach(surface, buffer, 0, 0);
-	wl_surface_commit(surface);
-}
-
-int set_cloexec_or_close(int fd)
-{
-	long flags;
-
-	if (fd == -1)
-		return -1;
-
-	flags = fcntl(fd, F_GETFD);
-
-	if (flags == -1)
-		goto err;
-
-	if (fcntl(fd, F_SETFD, flags | FD_CLOEXEC) == -1)
-		goto err;
-
-	return fd;
-
-err:
-	close(fd);
-	return -1;
-}
-
-int create_tmpfile_cloexec(char *tmpname)
-{
-	int fd;
-
-	fd = mkstemp(tmpname);
-
-	if (fd >= 0) {
-		fd = set_cloexec_or_close(fd);
-		unlink(tmpname);
-	}
-
-	return fd;
-}
-
-/*
- * Create a new, unique, anonymous file of the given size, and
- * return the file descriptor for it. The file descriptor is set
- * CLOEXEC. The file is immediately suitable for mmap()'ing
- * the given size at offset zero.
- *
- * The file should not have a permanent backing store like a disk,
- * but may have if XDG_RUNTIME_DIR is not properly implemented in OS.
- *
- * The file name is deleted from the file system.
- *
- * The file is suitable for buffer sharing between processes by
- * transmitting the file descriptor over Unix sockets using the
- * SCM_RIGHTS methods.
- */
-int
-os_create_anonymous_file(off_t size)
-{
-	const char templat[] = "/egl-shared-XXXXXX";
-	const char *path;
-	char *name;
-	int fd;
-
-	path = getenv("XDG_RUNTIME_DIR");
-	if (!path) {
-		errno = ENOENT;
-		return -1;
-	}
-
-	name = static_cast< char* >(malloc(strlen(path) + sizeof(templat)));
-
-	if (!name)
-		return -1;
-
-	strcpy(name, path);
-	strcat(name, templat);
-
-	fd = create_tmpfile_cloexec(name);
-
-	free(name);
-
-	if (fd < 0)
-		return -1;
-
-	if (ftruncate(fd, size) < 0) {
-		close(fd);
-		return -1;
-	}
-
-	return fd;
 }
 
 } // namespace anonymous
@@ -498,10 +386,10 @@ struct EGL {
 	DRMBuffer primary_drm[2]; // DRM buffer object, per buffer
 	int32_t drm_fd;           // DRM device file descriptor
 	GLuint primary_rbo[4];    // framebuffer attachment names, per buffer
-	GLuint primary_fbo[2];    // framebuffer name, per buffer
 
 	uint32_t window_w;        // framebuffer (windowed) width
 	uint32_t window_h;        // framebuffer (windowed) height
+	uint32_t fourcc;          // DRM fourcc of the framebuffer
 
 	EGL(uint32_t w,
 	    uint32_t h)
@@ -843,7 +731,7 @@ bool EGL::initGLES2(
 	const uint32_t nbits_b = bitness[2];
 	const uint32_t nbits_a = bitness[3];
 
-	uint32_t fourcc = 0;
+	fourcc = 0;
 	uint32_t bpp = 0;
 	switch (nbits_r << 24 | nbits_g << 16 | nbits_b << 8 | nbits_a) {
 	case 0x08080808:
@@ -1398,39 +1286,38 @@ int main(
 
 	// emit app's first frame
 	if (!hook::render_frame())
-		return EXIT_SUCCESS;
+		return EXIT_FAILURE;
 
 	// set up wayland
-	wl_shm_pool *pool;
-	wl_shell_surface *shell_surface;
-	const int memfile = os_create_anonymous_file((image_w * image_h + FULLSCREEN_WIDTH * FULLSCREEN_HEIGHT) * sizeof(pixel_t));
-
-	if (memfile < 0) {
-		fprintf(stderr, "Error opening memfile\n");
-		return EXIT_FAILURE;
-	}
-
 	if (setup_wayland()) {
 		fprintf(stderr, "Error opening display\n");
 		return EXIT_FAILURE;
 	}
 
-	pool          = create_memory_pool(memfile);
-	shell_surface = create_surface();
-	bufferW       = create_buffer(pool, image_w, image_h);
-	bufferF       = create_buffer(pool, FULLSCREEN_WIDTH, FULLSCREEN_HEIGHT);
+	wl_shell_surface *shell_surface = create_surface();
+
+	const compiler_assert< countof(buffer) == countof(egl.image) > assert_wl_buffers_count __attribute__ ((unused));
+
+	for (size_t i = 0; i < countof(buffer); ++i) {
+		buffer[i] = create_buffer_dmabuf(
+			egl.primary_drm[i].dmabuf_fd,
+			egl.primary_drm[i].pitch,
+			egl.fourcc,
+			image_w, image_h);
+	}
 
 	// start in windowed mode
 	curr_width = image_w;
 	curr_height = image_h;
 
-	// next buffer bind below will trigger first commit, so make sure a frame listener is active
+	// before first commit, so make sure a frame listener is active
 	wl_surface *surface = static_cast< wl_surface* >(wl_shell_surface_get_user_data(shell_surface));
 	set_frame_listener(surface);
 
 	const uint64_t t0 = timer_ns();
 
-	bind_buffer(bufferW, shell_surface);
+	wl_surface_attach(surface, buffer[0], 0, 0);
+	wl_surface_commit(surface);
 
 	while (wl_display_dispatch(display) != -1) {
 		if (frame_error || frames_done == frames)
@@ -1448,12 +1335,11 @@ int main(
 	}
 
 	// clean up wayland
-	free_buffer(bufferF);
-	free_buffer(bufferW);
+	for (size_t i = 0; i < countof(buffer); ++i) {
+		free_buffer(buffer[i]);
+	}
 	free_surface(shell_surface);
-	free_memory_pool(pool);
 	cleanup_wayland();
-	close(memfile);
 
 	// clean up gles
 	hook::deinit_resources();
