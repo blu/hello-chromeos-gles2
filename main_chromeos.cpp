@@ -1262,19 +1262,21 @@ int main(
 	if (drawcalls && !hook::set_num_drawcalls(drawcalls))
 		stream::cerr << "drawcalls argument ignored by app\n";
 
-	if (0 == bitness[0]) {
-		stream::cerr << "unspecified framebuffer bitness; bailing out\n";
-		return EXIT_FAILURE;
-	}
-
 	// set up GLES
 	EGL egl(image_w, image_h);
 
-	if (!egl.initGLES2(fsaa, bitness) ||
-	    !reportGLCaps() ||
-	    !hook::init_resources(argc, argv))
-	{
-		stream::cerr << "failed to initialise either GLES or resources; bailing out\n";
+	if (!egl.initGLES2(fsaa, bitness)) {
+		stream::cerr << "Error: failed to initialise GLES\n";
+		return EXIT_FAILURE;
+	}
+
+	if (!reportGLCaps()) {
+		stream::cerr << "Error: failed to report GLES caps\n";
+		return EXIT_FAILURE;
+	}
+
+	if (!hook::init_resources(argc, argv)) {
+		stream::cerr << "Error: failed to initialise app resources\n";
 		return EXIT_FAILURE;
 	}
 
@@ -1338,7 +1340,7 @@ int main(
 	free_surface(shell_surface);
 	cleanup_wayland();
 
-	// clean up gles
+	// clean up GLES
 	hook::deinit_resources();
 	egl.deinit();
 
