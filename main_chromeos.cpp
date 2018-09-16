@@ -1295,7 +1295,7 @@ int main(
 
 	wl_shell_surface *shell_surface = create_surface();
 
-	const compiler_assert< countof(buffer) == countof(egl.image) > assert_wl_buffers_count __attribute__ ((unused));
+	const compiler_assert< countof(buffer) == countof(egl.primary_drm) > assert_wl_buffers_count __attribute__ ((unused));
 
 	for (size_t i = 0; i < countof(buffer); ++i) {
 		buffer[i] = create_buffer_dmabuf(
@@ -1309,7 +1309,7 @@ int main(
 	curr_width = image_w;
 	curr_height = image_h;
 
-	// before first commit, so make sure a frame listener is active
+	// make sure a frame listener is active before first surface commit
 	wl_surface *surface = static_cast< wl_surface* >(wl_shell_surface_get_user_data(shell_surface));
 	set_frame_listener(surface);
 
