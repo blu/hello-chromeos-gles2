@@ -222,11 +222,9 @@ bool parse_cli(
 }
 
 template < typename T >
-class generic_free
-{
+class generic_free {
 public:
-	void operator()(T* arg)
-	{
+	void operator()(T* arg) {
 		free(arg);
 	}
 };
@@ -801,6 +799,7 @@ bool render_frame()
 	g_angle = fmodf(g_angle + g_angle_step, 2.f * M_PI);
 
 	/////////////////////////////////////////////////////////////////
+	// activate the shader program and set up all valid uniform vars
 
 	glUseProgram(g_shader_prog[PROG_SPHERE]);
 
