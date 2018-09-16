@@ -280,6 +280,13 @@ void set_frame_listener(wl_surface *surface)
 
 void redraw(void *data, wl_callback *callback, uint32_t time)
 {
+	// emit app's next frame into the buffer that was just presented
+	glBindFramebuffer(GL_FRAMEBUFFER, primary_fbo[frames_done & 1]);
+	glViewport(0, 0, curr_width, curr_height);
+
+	frame_error = !hook::render_frame();
+	frames_done += 1;
+
 	// a callback is triggered only once and then abandoned; destroy the old
 	// callback that invoked us so it doesn't leak, then create a new callback
 	wl_callback_destroy(callback);
@@ -287,18 +294,10 @@ void redraw(void *data, wl_callback *callback, uint32_t time)
 	wl_surface *surface = static_cast< wl_surface* >(data);
 	set_frame_listener(surface);
 
-	// update wayland surface and trigger the corresponding screen update
+	// update wayland surface from the other buffer and trigger a screen update
 	wl_surface_attach(surface, buffer[frames_done & 1], 0, 0);
 	wl_surface_damage(surface, 0, 0, curr_width, curr_height);
 	wl_surface_commit(surface);
-
-	// emit app's next frame
-	frames_done += 1;
-
-	glBindFramebuffer(GL_FRAMEBUFFER, primary_fbo[frames_done & 1]);
-	glViewport(0, 0, curr_width, curr_height);
-
-	frame_error = !hook::render_frame();
 }
 
 wl_shell_surface *create_surface(void)
@@ -938,9 +937,6 @@ bool EGL::initGLES2(
 		}
 	}
 
-	glBindFramebuffer(GL_FRAMEBUFFER, primary_fbo[0]);
-	glViewport(0, 0, window_w, window_h);
-
 	deinit_self.reset();
 	return true;
 }
@@ -1283,7 +1279,17 @@ int main(
 	if (0 == frames)
 		return EXIT_SUCCESS;
 
-	// emit app's first frame
+	// emit app's first frame into buffer 0
+	glBindFramebuffer(GL_FRAMEBUFFER, primary_fbo[0]);
+	glViewport(0, 0, image_w, image_h);
+
+	if (!hook::render_frame())
+		return EXIT_FAILURE;
+
+	// emit app's second frame into buffer 1
+	glBindFramebuffer(GL_FRAMEBUFFER, primary_fbo[1]);
+	glViewport(0, 0, image_w, image_h);
+
 	if (!hook::render_frame())
 		return EXIT_FAILURE;
 
