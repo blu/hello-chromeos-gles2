@@ -61,13 +61,12 @@ options:
 
 Example of CLI usage:
 ```
-$ EGL_LOG_LEVEL=warning taskset 0xc ./test_egl_xxx -frames 2000 -bitness 8 8 8 8 -screen 640 640 60 -app albedo_map asset/texture/unperturbed_normal.raw 16 16 -app alt_anim
+$ EGL_LOG_LEVEL=warning ./test_egl_xxx -frames 2000 -bitness 8 8 8 8 -screen 640 640 60 -app albedo_map asset/texture/unperturbed_normal.raw 16 16 -app alt_anim
 ```
 
 The above:
 
 * Sets the EGL diagnostics envvar to 'warnings-only'.
-* Pins the app to the 3rd and 4th cores.
 * Specifies 2000 frames worth of runtime.
 * Specifies framebuffer pixel format of RGBA8888 (others supported are RGBA8880 and RGBA5650).
 * Specifies framebuffer geometry of 640x640x60Hz (refresh is required yet conveniently ignored).
