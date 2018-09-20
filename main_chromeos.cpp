@@ -295,14 +295,7 @@ void redraw(void *data, wl_callback *callback, uint32_t time)
 
 	fence[curr_buffer_idx] = new_fence;
 
-	// a callback is triggered only once and then abandoned; destroy the old
-	// callback that invoked us so it doesn't leak, then create a new callback
-	wl_callback_destroy(callback);
-
-	wl_surface *surface = static_cast< wl_surface* >(data);
-	set_frame_listener(surface);
-
-	// block on fence sync to make sure the gpu is done with the other buffer
+	// block on a fence sync to make sure the gpu is done with the other buffer
 	const EGLSyncKHR next_fence = fence[next_buffer_idx];
 
 	if (EGL_CONDITION_SATISFIED_KHR != eglClientWaitSyncKHR(
@@ -318,6 +311,13 @@ void redraw(void *data, wl_callback *callback, uint32_t time)
 	// a fence sync is triggered only once and then abandoned; destroy the old
 	// fence sync so it doesn't leak
 	eglDestroySyncKHR(display, next_fence);
+
+	// a callback is triggered only once and then abandoned; destroy the old
+	// callback that invoked us so it doesn't leak, then create a new callback
+	wl_callback_destroy(callback);
+
+	wl_surface *surface = static_cast< wl_surface* >(data);
+	set_frame_listener(surface);
 
 	// update wayland surface from the other buffer and trigger a screen update
 	wl_surface_attach(surface, buffer[next_buffer_idx], 0, 0);
