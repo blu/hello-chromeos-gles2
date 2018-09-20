@@ -80,6 +80,7 @@ zwp_linux_dmabuf_v1 *dmabuf;
 wl_shell *shell;
 wl_buffer *buffer[2];
 GLuint primary_fbo[2];
+EGLSyncKHR fence[2];
 
 bool frame_error;
 uint32_t frames_done;
@@ -220,7 +221,6 @@ static wl_buffer *create_buffer_dmabuf(
 
 	zwp_linux_buffer_params_v1_add_listener(params, &params_listener, NULL);
 
-#if 1
 	buffer = zwp_linux_buffer_params_v1_create_immed(params,
 		width,
 		height,
@@ -229,14 +229,6 @@ static wl_buffer *create_buffer_dmabuf(
 
 	wl_buffer_add_listener(buffer, &buffer_listener, NULL);
 
-#else
-	zwp_linux_buffer_params_v1_create(params,
-		width,
-		height,
-		dmabuf_format,
-		flags);
-
-#endif
 	return buffer;
 }
 
@@ -280,12 +272,28 @@ void set_frame_listener(wl_surface *surface)
 
 void redraw(void *data, wl_callback *callback, uint32_t time)
 {
+	const size_t curr_buffer_idx = frames_done & 1;
+	const size_t next_buffer_idx = ++frames_done & 1;
+
 	// emit app's next frame into the buffer that was just presented
-	glBindFramebuffer(GL_FRAMEBUFFER, primary_fbo[frames_done & 1]);
+	glBindFramebuffer(GL_FRAMEBUFFER, primary_fbo[curr_buffer_idx]);
 	glViewport(0, 0, curr_width, curr_height);
 
 	frame_error = !hook::render_frame();
-	frames_done += 1;
+
+	if (frame_error)
+		return;
+
+	// create a fence sync for next frame
+	const EGLDisplay display = eglGetCurrentDisplay();
+	const EGLSyncKHR new_fence = eglCreateSyncKHR(display, EGL_SYNC_FENCE_KHR, NULL);
+
+	if (EGL_NO_SYNC_KHR == new_fence) {
+		frame_error = true;
+		return;
+	}
+
+	fence[curr_buffer_idx] = new_fence;
 
 	// a callback is triggered only once and then abandoned; destroy the old
 	// callback that invoked us so it doesn't leak, then create a new callback
@@ -294,8 +302,25 @@ void redraw(void *data, wl_callback *callback, uint32_t time)
 	wl_surface *surface = static_cast< wl_surface* >(data);
 	set_frame_listener(surface);
 
+	// block on fence sync to make sure the gpu is done with the other buffer
+	const EGLSyncKHR next_fence = fence[next_buffer_idx];
+
+	if (EGL_CONDITION_SATISFIED_KHR != eglClientWaitSyncKHR(
+		display,
+		next_fence,
+		EGL_SYNC_FLUSH_COMMANDS_BIT_KHR,
+		EGL_FOREVER_KHR))
+	{
+		frame_error = true;
+		return;
+	}
+
+	// a fence sync in triggered only once and then abandoned; destroy the old
+	// fence sync so it doesn't leak
+	eglDestroySyncKHR(display, next_fence);
+
 	// update wayland surface from the other buffer and trigger a screen update
-	wl_surface_attach(surface, buffer[frames_done & 1], 0, 0);
+	wl_surface_attach(surface, buffer[next_buffer_idx], 0, 0);
 	wl_surface_damage(surface, 0, 0, curr_width, curr_height);
 	wl_surface_commit(surface);
 }
@@ -822,6 +847,10 @@ bool EGL::initGLES2(
 		stream::cerr << "egl does not support EGL_EXT_image_dma_buf_import\n";
 		return false;
 	}
+	if (NULL == strstr(str_exten, "EGL_KHR_fence_sync")) {
+		stream::cerr << "egl does not support EGL_KHR_fence_sync\n";
+		return false;
+	}
 
 	eglBindAPI(EGL_OPENGL_ES_API);
 
@@ -954,6 +983,12 @@ void EGL::deinit()
 		set_array(primary_rbo, 0U);
 	}
 
+	for (size_t i = 0; i < countof(fence); ++i) {
+		if (EGL_NO_SYNC_KHR == fence[i])
+			continue;
+		eglDestroySyncKHR(display, fence[i]);
+		fence[i] = EGL_NO_SYNC_KHR;
+	}
 	for (size_t i = 0; i < countof(image); ++i) {
 		if (EGL_NO_IMAGE_KHR == image[i])
 			continue;
@@ -1279,19 +1314,8 @@ int main(
 	if (0 == frames)
 		return EXIT_SUCCESS;
 
-	// emit app's first frame into buffer 0
-	glBindFramebuffer(GL_FRAMEBUFFER, primary_fbo[0]);
-	glViewport(0, 0, image_w, image_h);
-
-	if (!hook::render_frame())
-		return EXIT_FAILURE;
-
-	// emit app's second frame into buffer 1
-	glBindFramebuffer(GL_FRAMEBUFFER, primary_fbo[1]);
-	glViewport(0, 0, image_w, image_h);
-
-	if (!hook::render_frame())
-		return EXIT_FAILURE;
+	// create a dummy fence sync for buffer1
+	fence[1] = eglCreateSyncKHR(egl.display, EGL_SYNC_FENCE_KHR, NULL);
 
 	// set up wayland
 	if (setup_wayland()) {

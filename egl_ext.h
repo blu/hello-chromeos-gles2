@@ -8,6 +8,13 @@ extern PFNEGLCREATEIMAGEKHRPROC  eglCreateImageKHR;
 extern PFNEGLDESTROYIMAGEKHRPROC eglDestroyImageKHR;
 
 #endif /* EGL_KHR_image */
+#if EGL_KHR_fence_sync
+extern PFNEGLCREATESYNCKHRPROC     eglCreateSyncKHR;
+extern PFNEGLDESTROYSYNCKHRPROC    eglDestroySyncKHR;
+extern PFNEGLCLIENTWAITSYNCKHRPROC eglClientWaitSyncKHR;
+extern PFNEGLGETSYNCATTRIBKHRPROC  eglGetSyncAttribKHR;
+
+#endif /* EGL_KHR_fence_sync */
 #if __cplusplus
 extern "C" {
 #endif
