@@ -315,7 +315,7 @@ void redraw(void *data, wl_callback *callback, uint32_t time)
 		return;
 	}
 
-	// a fence sync in triggered only once and then abandoned; destroy the old
+	// a fence sync is triggered only once and then abandoned; destroy the old
 	// fence sync so it doesn't leak
 	eglDestroySyncKHR(display, next_fence);
 
@@ -437,6 +437,10 @@ struct EGL {
 		const unsigned (& bitness)[4]);
 
 	void deinit();
+
+	~EGL() {
+		deinit();
+	}
 };
 
 static std::string
@@ -1372,7 +1376,6 @@ int main(
 
 	// clean up GLES
 	hook::deinit_resources();
-	egl.deinit();
 
 	return EXIT_SUCCESS;
 }
