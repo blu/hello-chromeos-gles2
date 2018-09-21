@@ -284,6 +284,7 @@ void redraw(void *data, wl_callback *callback, uint32_t time)
 	if (frame_error)
 		return;
 
+#if 0
 	// create a fence sync for next frame
 	const EGLDisplay display = eglGetCurrentDisplay();
 	const EGLSyncKHR new_fence = eglCreateSyncKHR(display, EGL_SYNC_FENCE_KHR, NULL);
@@ -311,7 +312,9 @@ void redraw(void *data, wl_callback *callback, uint32_t time)
 	// a fence sync is triggered only once and then abandoned; destroy the old
 	// fence sync so it doesn't leak
 	eglDestroySyncKHR(display, next_fence);
+	fence[next_buffer_idx] = EGL_NO_SYNC_KHR;
 
+#endif
 	// a callback is triggered only once and then abandoned; destroy the old
 	// callback that invoked us so it doesn't leak, then create a new callback
 	wl_callback_destroy(callback);
