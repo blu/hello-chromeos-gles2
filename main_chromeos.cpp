@@ -1271,6 +1271,10 @@ int main(
 	int argc,
 	char** argv)
 {
+	using util::scoped_linkage_ptr;
+	using util::scoped_functor;
+	using util::deinit_resources_t;
+
 	stream::cin.open(stdin);
 	stream::cout.open(stdout);
 	stream::cerr.open(stderr);
@@ -1317,6 +1321,8 @@ int main(
 		stream::cerr << "Error: failed to initialise app resources\n";
 		return EXIT_FAILURE;
 	}
+
+	const scoped_linkage_ptr< deinit_resources_t, scoped_functor, hook::deinit_resources > on_exit;
 
 	if (0 == frames)
 		return EXIT_SUCCESS;
@@ -1376,9 +1382,6 @@ int main(
 	}
 	free_surface(shell_surface);
 	cleanup_wayland();
-
-	// clean up GLES
-	hook::deinit_resources();
 
 	return EXIT_SUCCESS;
 }
