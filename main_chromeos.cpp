@@ -80,7 +80,6 @@ const char arg_drawcalls[]     = "drawcalls";
 // wayland interfaces
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-wl_display *display;
 wl_compositor *compositor;
 zwp_linux_dmabuf_v1 *dmabuf;
 wl_shell *shell;
@@ -126,6 +125,7 @@ struct EGL {
 	EGLDisplay display;     // EGL display
 	EGLContext context;     // EGL context
 	int32_t drm_fd;         // DRM device file descriptor
+	uint32_t fourcc;        // DRM fourcc of the framebuffer
 
 	// primary framebuffer (double buffering)
 	DRMBuffer drmbuf[2];    // DRM buffer object, per buffer
@@ -142,7 +142,6 @@ struct EGL {
 
 	uint32_t window_w;      // framebuffer width
 	uint32_t window_h;      // framebuffer height
-	uint32_t fourcc;        // DRM fourcc of the framebuffer
 
 	EGL(uint32_t w,
 	    uint32_t h)
@@ -429,23 +428,22 @@ const wl_registry_listener registry_listener = {
 	.global_remove = registry_global_remove
 };
 
-int setup_wayland(void)
+wl_display *setup_wayland(void)
 {
-	wl_registry *registry;
+	wl_display *display = wl_display_connect(NULL);
 
-	display = wl_display_connect(NULL);
 	if (display == NULL)
-		return -1;
+		return NULL;
 
-	registry = wl_display_get_registry(display);
+	wl_registry *registry = wl_display_get_registry(display);
 	wl_registry_add_listener(registry, &registry_listener, NULL);
 	wl_display_roundtrip(display);
 	wl_registry_destroy(registry);
 
-	return 0;
+	return display;
 }
 
-void cleanup_wayland(void)
+void cleanup_wayland(wl_display *display)
 {
 	wl_shell_destroy(shell);
 	zwp_linux_dmabuf_v1_destroy(dmabuf);
@@ -1363,7 +1361,9 @@ int main(
 	}
 
 	// set up wayland
-	if (setup_wayland()) {
+	wl_display *display = setup_wayland();
+
+	if (!display) {
 		stream::cerr << "Error opening wayland display\n";
 		return EXIT_FAILURE;
 	}
@@ -1408,7 +1408,7 @@ int main(
 
 	wl_shell_surface_destroy(shell_surface);
 	wl_surface_destroy(egl.surface);
-	cleanup_wayland();
+	cleanup_wayland(display);
 
 	return EXIT_SUCCESS;
 }
