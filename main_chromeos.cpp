@@ -74,294 +74,14 @@ const char arg_drawcalls[]     = "drawcalls";
 #define FULLSCREEN_WIDTH 1366
 #define FULLSCREEN_HEIGHT 768
 
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// wayland interfaces
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
 wl_display *display;
 wl_compositor *compositor;
 zwp_linux_dmabuf_v1 *dmabuf;
 wl_shell *shell;
-wl_buffer *buffer[2];
-GLuint primary_fbo[2];
-EGLSyncKHR fence[2];
-
-bool frame_error;
-uint32_t frames_done;
-int32_t curr_width;
-int32_t curr_height;
-
-void registry_global(void *data, wl_registry *registry, uint32_t name, const char *interface, uint32_t version);
-void registry_global_remove(void *, wl_registry *, uint32_t);
-
-void redraw(void *, wl_callback *, uint32_t);
-
-const wl_registry_listener registry_listener = {
-	.global = registry_global,
-	.global_remove = registry_global_remove
-};
-
-int setup_wayland(void)
-{
-	wl_registry *registry;
-
-	display = wl_display_connect(NULL);
-	if (display == NULL)
-		return -1;
-
-	registry = wl_display_get_registry(display);
-	wl_registry_add_listener(registry, &registry_listener, NULL);
-	wl_display_roundtrip(display);
-	wl_registry_destroy(registry);
-
-	return 0;
-}
-
-void cleanup_wayland(void)
-{
-	wl_shell_destroy(shell);
-	zwp_linux_dmabuf_v1_destroy(dmabuf);
-	wl_compositor_destroy(compositor);
-	wl_display_disconnect(display);
-}
-
-static void
-dmabuf_format(void *data, struct zwp_linux_dmabuf_v1 *zwp_linux_dmabuf, uint32_t format) {
-#if DEBUG
-	fprintf(stderr, "%s, 0x%08x, %c%c%c%c\n", __FUNCTION__, format,
-		char(format >>  0),
-		char(format >>  8),
-		char(format >> 16),
-		char(format >> 24));
-
-#endif
-}
-
-static void
-dmabuf_modifier(void *data, struct zwp_linux_dmabuf_v1 *zwp_linux_dmabuf,
-	uint32_t format, uint32_t modifier_hi, uint32_t modifier_lo) {
-}
-
-static const struct zwp_linux_dmabuf_v1_listener dmabuf_listener = {
-    .format = dmabuf_format, // up to protocol version 2 zwp_linux_dmabuf_v1_listener::format is called back
-    .modifier = dmabuf_modifier // from protocol version 3 onwards zwp_linux_dmabuf_v1_listener::modifier is called back
-};
-
-void registry_global(void *data, wl_registry *registry, uint32_t name, const char *interface, uint32_t version)
-{
-#if DEBUG
-    fprintf(stderr, "%s, %s id %d version %d\n", __FUNCTION__, interface, name, version);
-
-#endif
-	if (strcmp(interface, wl_compositor_interface.name) == 0)
-		compositor = static_cast< wl_compositor* >(wl_registry_bind(registry, name, &wl_compositor_interface, 3));
-	else if (strcmp(interface, zwp_linux_dmabuf_v1_interface.name) == 0) {
-		dmabuf = static_cast< zwp_linux_dmabuf_v1* >(wl_registry_bind(registry, name, &zwp_linux_dmabuf_v1_interface, 2));
-		zwp_linux_dmabuf_v1_add_listener(dmabuf, &dmabuf_listener, data);
-	}
-	else if (strcmp(interface, wl_shell_interface.name) == 0)
-		shell = static_cast< wl_shell* >(wl_registry_bind(registry, name, &wl_shell_interface, 1));
-}
-
-void registry_global_remove(void *, wl_registry *, uint32_t) {
-}
-
-static void
-buffer_release(void *data, struct wl_buffer *buffer)
-{
-#if DEBUG
-	fprintf(stderr, "%s, %p\n", __FUNCTION__, data);
-
-#endif
-}
-
-static const struct wl_buffer_listener buffer_listener = {
-	.release = buffer_release
-};
-
-static void
-create_succeeded(void *data,
-	struct zwp_linux_buffer_params_v1 *params,
-	struct wl_buffer *new_buffer)
-{
-	wl_buffer_add_listener(new_buffer, &buffer_listener, data);
-	zwp_linux_buffer_params_v1_destroy(params);
-
-	fprintf(stderr, "Success: zwp_linux_buffer_params.create succeeded.\n");
-}
-
-static void
-create_failed(void *data, struct zwp_linux_buffer_params_v1 *params)
-{
-	zwp_linux_buffer_params_v1_destroy(params);
-
-	fprintf(stderr, "Error: zwp_linux_buffer_params.create failed.\n");
-}
-
-static const struct zwp_linux_buffer_params_v1_listener params_listener = {
-	.created = create_succeeded,
-	.failed = create_failed
-};
-
-static wl_buffer *create_buffer_dmabuf(
-	int32_t dmabuf_fd,
-	uint32_t dmabuf_stride,
-	uint32_t dmabuf_format,
-	uint32_t width,
-	uint32_t height)
-{
-	uint32_t flags = 0; // TODO: ZWP_LINUX_BUFFER_PARAMS_V1_FLAGS_Y_INVERT gets rejected by the server
-	struct zwp_linux_buffer_params_v1 *params;
-	struct wl_buffer *buffer;
-
-	params = zwp_linux_dmabuf_v1_create_params(dmabuf);
-	zwp_linux_buffer_params_v1_add(params,
-	                   dmabuf_fd,
-	                   0, // plane_idx
-	                   0, // offset
-	                   dmabuf_stride,
-	                   0, // modifier_hi
-	                   0); // modifier_lo
-
-	zwp_linux_buffer_params_v1_add_listener(params, &params_listener, NULL);
-
-	buffer = zwp_linux_buffer_params_v1_create_immed(params,
-		width,
-		height,
-		dmabuf_format,
-		flags);
-
-	wl_buffer_add_listener(buffer, &buffer_listener, NULL);
-
-	return buffer;
-}
-
-void free_buffer(wl_buffer *buffer)
-{
-	wl_buffer_destroy(buffer);
-}
-
-void shell_surface_ping(void *data, wl_shell_surface *shell_surface, uint32_t serial)
-{
-	wl_shell_surface_pong(shell_surface, serial);
-}
-
-void shell_surface_configure(void *data, wl_shell_surface *shell_surface, uint32_t edges, int32_t width, int32_t height)
-{
-	// on resize-to-fullscreen we get called back twice: once at the start of transition, and once at the end of transition;
-	// both times we get passed the final-target width and height
-	// on resize-to-windowed we get called back once;
-
-#if 0 // TODO
-	curr_width = width;
-	curr_height = height;
-
-#endif
-}
-
-const wl_shell_surface_listener shell_surface_listener = {
-	.ping = shell_surface_ping,
-	.configure = shell_surface_configure,
-};
-
-const wl_callback_listener frame_listener = {
-	.done = redraw
-};
-
-void set_frame_listener(wl_surface *surface)
-{
-	wl_callback *callback = wl_surface_frame(surface);
-	wl_callback_add_listener(callback, &frame_listener, surface);
-}
-
-void redraw(void *data, wl_callback *callback, uint32_t time)
-{
-	const size_t curr_buffer_idx = frames_done & 1;
-	const size_t next_buffer_idx = ++frames_done & 1;
-
-	// emit app's next frame into the buffer that was just presented
-	glBindFramebuffer(GL_FRAMEBUFFER, primary_fbo[curr_buffer_idx]);
-	glViewport(0, 0, curr_width, curr_height);
-
-	frame_error = !hook::render_frame();
-
-	if (frame_error)
-		return;
-
-#if 0
-	// create a fence sync for next frame
-	const EGLDisplay display = eglGetCurrentDisplay();
-	const EGLSyncKHR new_fence = eglCreateSyncKHR(display, EGL_SYNC_FENCE_KHR, NULL);
-
-	if (EGL_NO_SYNC_KHR == new_fence) {
-		frame_error = true;
-		return;
-	}
-
-	fence[curr_buffer_idx] = new_fence;
-
-	// block on a fence sync to make sure the gpu is done with the other buffer
-	const EGLSyncKHR next_fence = fence[next_buffer_idx];
-
-	if (EGL_CONDITION_SATISFIED_KHR != eglClientWaitSyncKHR(
-		display,
-		next_fence,
-		EGL_SYNC_FLUSH_COMMANDS_BIT_KHR,
-		EGL_FOREVER_KHR))
-	{
-		frame_error = true;
-		return;
-	}
-
-	// a fence sync is triggered only once and then abandoned; destroy the old
-	// fence sync so it doesn't leak
-	eglDestroySyncKHR(display, next_fence);
-	fence[next_buffer_idx] = EGL_NO_SYNC_KHR;
-
-#endif
-	// a callback is triggered only once and then abandoned; destroy the old
-	// callback that invoked us so it doesn't leak, then create a new callback
-	wl_callback_destroy(callback);
-
-	wl_surface *surface = static_cast< wl_surface* >(data);
-	set_frame_listener(surface);
-
-	// update wayland surface from the other buffer and trigger a screen update
-	wl_surface_attach(surface, buffer[next_buffer_idx], 0, 0);
-	wl_surface_damage(surface, 0, 0, curr_width, curr_height);
-	wl_surface_commit(surface);
-}
-
-wl_shell_surface *create_surface(void)
-{
-	wl_surface *surface;
-	wl_shell_surface *shell_surface;
-
-	surface = wl_compositor_create_surface(compositor);
-
-	if (surface == NULL)
-		return NULL;
-
-	shell_surface = wl_shell_get_shell_surface(shell, surface);
-
-	if (shell_surface == NULL) {
-		wl_surface_destroy(surface);
-		return NULL;
-	}
-
-	wl_shell_surface_add_listener(shell_surface, &shell_surface_listener, 0);
-	wl_shell_surface_set_toplevel(shell_surface);
-	wl_shell_surface_set_user_data(shell_surface, surface);
-	wl_surface_set_user_data(surface, NULL);
-
-	return shell_surface;
-}
-
-void free_surface(wl_shell_surface *shell_surface)
-{
-	wl_surface *surface = static_cast< wl_surface* >(wl_shell_surface_get_user_data(shell_surface));
-
-	wl_shell_surface_destroy(shell_surface);
-	wl_surface_destroy(surface);
-}
-
-} // namespace anonymous
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // EGL helper
@@ -399,37 +119,51 @@ struct compiler_assert;
 template <>
 struct compiler_assert< true > {};
 
-
 struct EGL {
 	// general enablement
-	EGLDisplay display;
-	EGLContext context;
+	EGLDisplay display;     // EGL display
+	EGLContext context;     // EGL context
+	int32_t drm_fd;         // DRM device file descriptor
 
 	// primary framebuffer (double buffering)
-	EGLImage image[2];        // EGL image, per buffer
-	DRMBuffer primary_drm[2]; // DRM buffer object, per buffer
-	int32_t drm_fd;           // DRM device file descriptor
-	GLuint primary_rbo[4];    // framebuffer attachment names, per buffer
+	DRMBuffer drmbuf[2];    // DRM buffer object, per buffer
+	EGLImage image[2];      // EGL image, per buffer
+	GLuint rbo[4];          // framebuffer attachment names, per buffer
+	GLuint fbo[2];          // framebuffer name, per buffer
+	EGLSyncKHR fence[2];    // fence sync, per buffer
 
-	uint32_t window_w;        // framebuffer (windowed) width
-	uint32_t window_h;        // framebuffer (windowed) height
-	uint32_t fourcc;          // DRM fourcc of the framebuffer
+	wl_buffer *buffer[2];   // wayland buffer, per buffer (foreign ownership)
+	wl_surface *surface;    // wayland surface (foreign ownership)
+
+	int32_t frame_error;
+	uint32_t frame_count;
+
+	uint32_t window_w;      // framebuffer width
+	uint32_t window_h;      // framebuffer height
+	uint32_t fourcc;        // DRM fourcc of the framebuffer
 
 	EGL(uint32_t w,
 	    uint32_t h)
 	: display(EGL_NO_DISPLAY)
 	, context(EGL_NO_CONTEXT)
 	, drm_fd(-1)
+	, surface(nullptr)
+	, frame_error(0)
+	, frame_count(0)
 	, window_w(w)
 	, window_h(h)
 	{
-		const compiler_assert< countof(image) == countof(primary_drm) >     assert_countof_drm __attribute__ ((unused));
-		const compiler_assert< countof(image) == countof(primary_rbo) / 2 > assert_countof_rbo __attribute__ ((unused));
-		const compiler_assert< countof(image) == countof(primary_fbo) >     assert_countof_fbo __attribute__ ((unused));
+		const compiler_assert< countof(image) == countof(drmbuf) >  assert_countof_drm __attribute__ ((unused));
+		const compiler_assert< countof(image) == countof(rbo) / 2 > assert_countof_rbo __attribute__ ((unused));
+		const compiler_assert< countof(image) == countof(fbo) >     assert_countof_fbo __attribute__ ((unused));
+		const compiler_assert< countof(image) == countof(fence) >   assert_countof_fence __attribute__ ((unused));
+		const compiler_assert< countof(image) == countof(buffer) >  assert_countof_wl_buffer __attribute__ ((unused));
 
 		set_array(image, EGL_NO_IMAGE_KHR);
-		set_array(primary_rbo, 0U);
-		set_array(primary_fbo, 0U);
+		set_array(rbo, GLuint(0));
+		set_array(fbo, GLuint(0));
+		set_array(fence, EGL_NO_SYNC_KHR);
+		set_array(buffer, (wl_buffer *) nullptr);
 
 		init_egl_ext();
 		init_gles_ext();
@@ -441,12 +175,51 @@ struct EGL {
 
 	void deinit();
 
-	~EGL() {
+	~EGL()
+	{
 		deinit();
+	}
+
+	int create_fence_sync(const size_t index)
+	{
+		const EGLSyncKHR new_fence = eglCreateSyncKHR(display, EGL_SYNC_FENCE_KHR, NULL);
+
+		if (EGL_NO_SYNC_KHR == new_fence) {
+			return -1;
+		}
+
+		fence[index] = new_fence;
+		return 0;
+	}
+
+	int wait_fence_sync(const size_t index)
+	{
+		const EGLSyncKHR old_fence = fence[index];
+
+		if (EGL_CONDITION_SATISFIED_KHR != eglClientWaitSyncKHR(
+			display,
+			old_fence,
+			EGL_SYNC_FLUSH_COMMANDS_BIT_KHR,
+			EGL_FOREVER_KHR))
+		{
+			return -1;
+		}
+
+		// a fence sync is triggered only once and then abandoned; destroy the old
+		// fence sync so it doesn't leak
+		eglDestroySyncKHR(display, old_fence);
+		fence[index] = EGL_NO_SYNC_KHR;
+		return 0;
+	}
+
+	void set_active_framebuffer(const size_t index) const
+	{
+		glBindFramebuffer(GL_FRAMEBUFFER, fbo[index]);
+		glViewport(0, 0, window_w, window_h);
 	}
 };
 
-static std::string
+std::string
 string_from_EGL_error(
 	const EGLint error)
 {
@@ -504,7 +277,7 @@ string_from_EGL_error(
 	return s.str();
 }
 
-static std::string
+std::string
 string_from_EGL_attrib(
 	const EGLint attr)
 {
@@ -613,8 +386,7 @@ string_from_EGL_attrib(
 	return s.str();
 }
 
-
-static std::string
+std::string
 string_from_GL_error(
 	const GLenum error)
 {
@@ -644,6 +416,257 @@ string_from_GL_error(
 
 	return s.str();
 }
+
+void registry_global(void *data, wl_registry *registry, uint32_t name, const char *interface, uint32_t version);
+void registry_global_remove(void *, wl_registry *, uint32_t);
+
+void redraw(void *, wl_callback *, uint32_t);
+
+const wl_registry_listener registry_listener = {
+	.global = registry_global,
+	.global_remove = registry_global_remove
+};
+
+int setup_wayland(void)
+{
+	wl_registry *registry;
+
+	display = wl_display_connect(NULL);
+	if (display == NULL)
+		return -1;
+
+	registry = wl_display_get_registry(display);
+	wl_registry_add_listener(registry, &registry_listener, NULL);
+	wl_display_roundtrip(display);
+	wl_registry_destroy(registry);
+
+	return 0;
+}
+
+void cleanup_wayland(void)
+{
+	wl_shell_destroy(shell);
+	zwp_linux_dmabuf_v1_destroy(dmabuf);
+	wl_compositor_destroy(compositor);
+	wl_display_disconnect(display);
+}
+
+void
+dmabuf_format(void *data, struct zwp_linux_dmabuf_v1 *zwp_linux_dmabuf, uint32_t format)
+{
+#if DEBUG
+	fprintf(stderr, "%s, 0x%08x, %c%c%c%c\n", __FUNCTION__, format,
+		char(format >>  0),
+		char(format >>  8),
+		char(format >> 16),
+		char(format >> 24));
+
+#endif
+}
+
+void
+dmabuf_modifier(void *data, struct zwp_linux_dmabuf_v1 *zwp_linux_dmabuf,
+	uint32_t format, uint32_t modifier_hi, uint32_t modifier_lo)
+{
+}
+
+const struct zwp_linux_dmabuf_v1_listener dmabuf_listener = {
+    .format = dmabuf_format, // up to protocol version 2 zwp_linux_dmabuf_v1_listener::format is called back
+    .modifier = dmabuf_modifier // from protocol version 3 onwards zwp_linux_dmabuf_v1_listener::modifier is called back
+};
+
+void registry_global(void *data, wl_registry *registry, uint32_t name, const char *interface, uint32_t version)
+{
+#if DEBUG
+    fprintf(stderr, "%s, %s id %d version %d\n", __FUNCTION__, interface, name, version);
+
+#endif
+	if (strcmp(interface, wl_compositor_interface.name) == 0)
+		compositor = static_cast< wl_compositor* >(wl_registry_bind(registry, name, &wl_compositor_interface, 3));
+	else if (strcmp(interface, zwp_linux_dmabuf_v1_interface.name) == 0) {
+		dmabuf = static_cast< zwp_linux_dmabuf_v1* >(wl_registry_bind(registry, name, &zwp_linux_dmabuf_v1_interface, 2));
+		zwp_linux_dmabuf_v1_add_listener(dmabuf, &dmabuf_listener, data);
+	}
+	else if (strcmp(interface, wl_shell_interface.name) == 0)
+		shell = static_cast< wl_shell* >(wl_registry_bind(registry, name, &wl_shell_interface, 1));
+}
+
+void registry_global_remove(void *, wl_registry *, uint32_t)
+{
+}
+
+void
+buffer_release(void *data, struct wl_buffer *buffer)
+{
+#if DEBUG
+	fprintf(stderr, "%s, %p\n", __FUNCTION__, data);
+
+#endif
+}
+
+const struct wl_buffer_listener buffer_listener = {
+	.release = buffer_release
+};
+
+void
+create_succeeded(void *data,
+	struct zwp_linux_buffer_params_v1 *params,
+	struct wl_buffer *new_buffer)
+{
+	wl_buffer_add_listener(new_buffer, &buffer_listener, data);
+	zwp_linux_buffer_params_v1_destroy(params);
+}
+
+void
+create_failed(void *data, struct zwp_linux_buffer_params_v1 *params)
+{
+	zwp_linux_buffer_params_v1_destroy(params);
+}
+
+const struct zwp_linux_buffer_params_v1_listener params_listener = {
+	.created = create_succeeded,
+	.failed = create_failed
+};
+
+wl_buffer *create_buffer_dmabuf(
+	int32_t dmabuf_fd,
+	uint32_t dmabuf_stride,
+	uint32_t dmabuf_format,
+	uint32_t width,
+	uint32_t height)
+{
+	uint32_t flags = 0; // TODO: ZWP_LINUX_BUFFER_PARAMS_V1_FLAGS_Y_INVERT gets rejected by the server
+	struct zwp_linux_buffer_params_v1 *params;
+	struct wl_buffer *buffer;
+
+	params = zwp_linux_dmabuf_v1_create_params(dmabuf);
+	zwp_linux_buffer_params_v1_add(params,
+	                   dmabuf_fd,
+	                   0, // plane_idx
+	                   0, // offset
+	                   dmabuf_stride,
+	                   0, // modifier_hi
+	                   0); // modifier_lo
+
+	zwp_linux_buffer_params_v1_add_listener(params, &params_listener, NULL);
+
+	buffer = zwp_linux_buffer_params_v1_create_immed(params,
+		width,
+		height,
+		dmabuf_format,
+		flags);
+
+	wl_buffer_add_listener(buffer, &buffer_listener, NULL);
+
+	return buffer;
+}
+
+void shell_surface_ping(void *data, wl_shell_surface *shell_surface, uint32_t serial)
+{
+	wl_shell_surface_pong(shell_surface, serial);
+}
+
+void shell_surface_configure(void *data, wl_shell_surface *shell_surface, uint32_t edges, int32_t width, int32_t height)
+{
+	// on resize-to-fullscreen we get called back twice: once at the start of transition, and once at the end of transition;
+	// both times we get passed the final-target width and height
+	// on resize-to-windowed we get called back once;
+
+#if 0 // TODO
+	EGL *egl = static_cast< EGL* >(wl_shell_surface_get_user_data(shell_surface));
+	egl->window_w = width;
+	egl->window_h = height;
+
+#endif
+}
+
+const wl_shell_surface_listener shell_surface_listener = {
+	.ping = shell_surface_ping,
+	.configure = shell_surface_configure,
+};
+
+const wl_callback_listener frame_listener = {
+	.done = redraw
+};
+
+void set_frame_listener(EGL *egl)
+{
+	wl_callback *callback = wl_surface_frame(egl->surface);
+	wl_callback_add_listener(callback, &frame_listener, egl);
+}
+
+void redraw(void *data, wl_callback *callback, uint32_t time)
+{
+	EGL *egl = static_cast< EGL* >(data);
+
+	const size_t curr_buffer_idx = egl->frame_count & 1;
+	const size_t next_buffer_idx = ++egl->frame_count & 1;
+
+	// emit app's next frame into the buffer that was just presented
+	egl->set_active_framebuffer(curr_buffer_idx);
+
+	wl_buffer *buffer = egl->buffer[next_buffer_idx];
+	wl_surface *surface = egl->surface;
+	const uint32_t window_w = egl->window_w;
+	const uint32_t window_h = egl->window_h;
+
+	if (!hook::render_frame()) {
+		egl->frame_error = -1;
+		return;
+	}
+
+#if 0
+	// create a fence sync for next frame
+	if (egl->create_fence_sync(curr_buffer_idx)) {
+		egl->frame_error = -1;
+		return;
+	}
+
+	// block on a previous fence sync to make sure the gpu is done with the other buffer
+	if (egl->wait_fence_sync(next_buffer_idx)) {
+		egl->frame_error = -1;
+		return;
+	}
+
+#endif
+	// a callback is triggered only once and then abandoned; destroy the old
+	// callback that invoked us so it doesn't leak, then create a new callback
+	wl_callback_destroy(callback);
+	set_frame_listener(egl);
+
+	// update wayland surface from the other buffer and trigger a screen update
+	wl_surface_attach(surface, buffer, 0, 0);
+	wl_surface_damage(surface, 0, 0, window_w, window_h);
+	wl_surface_commit(surface);
+}
+
+wl_shell_surface *create_surface(EGL *egl)
+{
+	wl_surface *surface;
+	wl_shell_surface *shell_surface;
+
+	surface = wl_compositor_create_surface(compositor);
+
+	if (surface == NULL)
+		return NULL;
+
+	shell_surface = wl_shell_get_shell_surface(shell, surface);
+
+	if (shell_surface == NULL) {
+		wl_surface_destroy(surface);
+		return NULL;
+	}
+
+	egl->surface = surface;
+	wl_shell_surface_add_listener(shell_surface, &shell_surface_listener, 0);
+	wl_shell_surface_set_toplevel(shell_surface);
+	wl_shell_surface_set_user_data(shell_surface, egl);
+	wl_surface_set_user_data(surface, NULL);
+
+	return shell_surface;
+}
+
+} // namespace anonymous
 
 namespace util {
 
@@ -676,7 +699,8 @@ reportGLError(
 template <>
 class scoped_functor< EGL > {
 public:
-	void operator()(EGL* arg) {
+	void operator()(EGL* arg)
+	{
 		reportEGLError();
 		arg->deinit();
 	}
@@ -691,8 +715,8 @@ static int create_drm_dumb_bo(
 	const uint32_t bpp,
 	uint32_t *const handle,
 	uint32_t *const pitch,
-	uint64_t *const size) {
-
+	uint64_t *const size)
+{
 	assert(handle);
 	assert(pitch);
 	assert(size);
@@ -715,8 +739,8 @@ static int create_drm_dumb_bo(
 
 static int destroy_drm_dumb_bo(
 	const int32_t drm_fd,
-	const uint32_t handle) {
-
+	const uint32_t handle)
+{
 	struct drm_mode_destroy_dumb destroy_request = {
 		.handle = handle
 	};
@@ -790,12 +814,12 @@ bool EGL::initGLES2(
 		return false;
 	}
 
-	for (size_t i = 0; i < countof(primary_drm); ++i) {
+	for (size_t i = 0; i < countof(drmbuf); ++i) {
 		const int ret = create_drm_dumb_bo(
 			drm_fd, window_w, window_h, bpp,
-			&primary_drm[i].handle,
-			&primary_drm[i].pitch,
-			&primary_drm[i].size);
+			&drmbuf[i].handle,
+			&drmbuf[i].pitch,
+			&drmbuf[i].size);
 
 		if (ret) {
 			stream::cerr << "could not allocate dumb buffer: " << strerror(ret) << '\n';
@@ -803,8 +827,8 @@ bool EGL::initGLES2(
 		}
 	}
 
-	for (size_t i = 0; i < countof(primary_drm); ++i) {
-		const int ret = create_drm_dmabuf(drm_fd, primary_drm[i].handle, &primary_drm[i].dmabuf_fd);
+	for (size_t i = 0; i < countof(drmbuf); ++i) {
+		const int ret = create_drm_dmabuf(drm_fd, drmbuf[i].handle, &drmbuf[i].dmabuf_fd);
 
 		if (ret) {
 			stream::cerr << "could not export buffer: " << strerror(ret) << '\n';
@@ -894,8 +918,8 @@ bool EGL::initGLES2(
 	};
 
 	for (size_t i = 0; i < countof(image); ++i) {
-		image_attr[ 7] = EGLint(primary_drm[i].dmabuf_fd);
-		image_attr[11] = EGLint(primary_drm[i].pitch);
+		image_attr[ 7] = EGLint(drmbuf[i].dmabuf_fd);
+		image_attr[11] = EGLint(drmbuf[i].pitch);
 
 		image[i] = eglCreateImageKHR(
 			display,
@@ -921,11 +945,11 @@ bool EGL::initGLES2(
 	}
 
 	// set the newly-acquired EGLimage as storage to our primary renderbuffer
-	glGenRenderbuffers(countof(primary_rbo), primary_rbo);
-	glGenFramebuffers(countof(primary_fbo), primary_fbo);
+	glGenRenderbuffers(countof(rbo), rbo);
+	glGenFramebuffers(countof(fbo), fbo);
 
 	for (size_t i = 0; i < countof(image); ++i) {
-		glBindRenderbuffer(GL_RENDERBUFFER, primary_rbo[i]);
+		glBindRenderbuffer(GL_RENDERBUFFER, rbo[i]);
 		glEGLImageTargetRenderbufferStorageOES(GL_RENDERBUFFER, image[i]);
 
 		DEBUG_GL_ERR()
@@ -935,7 +959,7 @@ bool EGL::initGLES2(
 
 	if (requires_depth) {
 		for (size_t i = 0; i < countof(image); ++i) {
-			glBindRenderbuffer(GL_RENDERBUFFER, primary_rbo[countof(image) + i]);
+			glBindRenderbuffer(GL_RENDERBUFFER, rbo[countof(image) + i]);
 			glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8_OES, window_w, window_h);
 
 			DEBUG_GL_ERR()
@@ -945,24 +969,24 @@ bool EGL::initGLES2(
 	glBindRenderbuffer(GL_RENDERBUFFER, 0);
 
 	for (size_t i = 0; i < countof(image); ++i) {
-		glBindFramebuffer(GL_FRAMEBUFFER, primary_fbo[i]);
+		glBindFramebuffer(GL_FRAMEBUFFER, fbo[i]);
 		glFramebufferRenderbuffer(
 			GL_FRAMEBUFFER,
 			GL_COLOR_ATTACHMENT0,
 			GL_RENDERBUFFER,
-			primary_rbo[i]);
+			rbo[i]);
 
 		if (requires_depth) {
 			glFramebufferRenderbuffer(
 				GL_FRAMEBUFFER,
 				GL_DEPTH_ATTACHMENT,
 				GL_RENDERBUFFER,
-				primary_rbo[countof(image) + i]);
+				rbo[countof(image) + i]);
 			glFramebufferRenderbuffer(
 				GL_FRAMEBUFFER,
 				GL_STENCIL_ATTACHMENT,
 				GL_RENDERBUFFER,
-				primary_rbo[countof(image) + i]);
+				rbo[countof(image) + i]);
 		}
 
 		const GLenum fbo_success = glCheckFramebufferStatus(GL_FRAMEBUFFER);
@@ -977,17 +1001,16 @@ bool EGL::initGLES2(
 	return true;
 }
 
-
 void EGL::deinit()
 {
-	if (0 != primary_fbo[0]) {
-		glDeleteFramebuffers(countof(primary_fbo), primary_fbo);
-		set_array(primary_fbo, 0U);
+	if (0 != fbo[0]) {
+		glDeleteFramebuffers(countof(fbo), fbo);
+		set_array(fbo, GLuint(0));
 	}
 
-	if (0 != primary_rbo[0]) {
-		glDeleteRenderbuffers(countof(primary_rbo), primary_rbo);
-		set_array(primary_rbo, 0U);
+	if (0 != rbo[0]) {
+		glDeleteRenderbuffers(countof(rbo), rbo);
+		set_array(rbo, GLuint(0));
 	}
 
 	for (size_t i = 0; i < countof(fence); ++i) {
@@ -996,6 +1019,7 @@ void EGL::deinit()
 		eglDestroySyncKHR(display, fence[i]);
 		fence[i] = EGL_NO_SYNC_KHR;
 	}
+
 	for (size_t i = 0; i < countof(image); ++i) {
 		if (EGL_NO_IMAGE_KHR == image[i])
 			continue;
@@ -1003,20 +1027,20 @@ void EGL::deinit()
 		image[i] = EGL_NO_IMAGE_KHR;
 	}
 
-	for (size_t i = 0; i < countof(primary_drm); ++i) {
-		if (-1 == primary_drm[i].dmabuf_fd)
+	for (size_t i = 0; i < countof(drmbuf); ++i) {
+		if (-1 == drmbuf[i].dmabuf_fd)
 			continue;
-		close(primary_drm[i].dmabuf_fd);
-		primary_drm[i].dmabuf_fd = -1;
+		close(drmbuf[i].dmabuf_fd);
+		drmbuf[i].dmabuf_fd = -1;
 	}
 
-	for (size_t i = 0; i < countof(primary_drm); ++i) {
-		if (0 == primary_drm[i].handle)
+	for (size_t i = 0; i < countof(drmbuf); ++i) {
+		if (0 == drmbuf[i].handle)
 			continue;
-		destroy_drm_dumb_bo(drm_fd, primary_drm[i].handle);
-		primary_drm[i].handle = 0;
-		primary_drm[i].pitch = 0;
-		primary_drm[i].size = 0;
+		destroy_drm_dumb_bo(drm_fd, drmbuf[i].handle);
+		drmbuf[i].handle = 0;
+		drmbuf[i].pitch = 0;
+		drmbuf[i].size = 0;
 	}
 
 	if (-1 != drm_fd) {
@@ -1035,7 +1059,6 @@ void EGL::deinit()
 		display = EGL_NO_DISPLAY;
 	}
 }
-
 
 static bool
 reportGLCaps()
@@ -1308,17 +1331,17 @@ int main(
 	EGL egl(image_w, image_h);
 
 	if (!egl.initGLES2(fsaa, bitness)) {
-		stream::cerr << "Error: failed to initialise GLES\n";
+		stream::cerr << "Error initializing GLES\n";
 		return EXIT_FAILURE;
 	}
 
 	if (!reportGLCaps()) {
-		stream::cerr << "Error: failed to report GLES caps\n";
+		stream::cerr << "Error reporting GLES caps\n";
 		return EXIT_FAILURE;
 	}
 
 	if (!hook::init_resources(argc, argv)) {
-		stream::cerr << "Error: failed to initialise app resources\n";
+		stream::cerr << "Error initializing app resources\n";
 		return EXIT_FAILURE;
 	}
 
@@ -1328,59 +1351,57 @@ int main(
 		return EXIT_SUCCESS;
 
 	// create a dummy fence sync for buffer1
-	fence[1] = eglCreateSyncKHR(egl.display, EGL_SYNC_FENCE_KHR, NULL);
-
-	// set up wayland
-	if (setup_wayland()) {
-		fprintf(stderr, "Error opening display\n");
+	if (egl.create_fence_sync(1)) {
+		stream::cerr << "Error creating fence sync\n";
 		return EXIT_FAILURE;
 	}
 
-	wl_shell_surface *shell_surface = create_surface();
+	// set up wayland
+	if (setup_wayland()) {
+		stream::cerr << "Error opening wayland display\n";
+		return EXIT_FAILURE;
+	}
 
-	const compiler_assert< countof(buffer) == countof(egl.primary_drm) > assert_wl_buffers_count __attribute__ ((unused));
+	wl_shell_surface *shell_surface = create_surface(&egl);
 
-	for (size_t i = 0; i < countof(buffer); ++i) {
-		buffer[i] = create_buffer_dmabuf(
-			egl.primary_drm[i].dmabuf_fd,
-			egl.primary_drm[i].pitch,
+	for (size_t i = 0; i < countof(egl.buffer); ++i) {
+		egl.buffer[i] = create_buffer_dmabuf(
+			egl.drmbuf[i].dmabuf_fd,
+			egl.drmbuf[i].pitch,
 			egl.fourcc,
 			image_w, image_h);
 	}
 
-	// start in windowed mode
-	curr_width = image_w;
-	curr_height = image_h;
-
 	// make sure a frame listener is active before first surface commit
-	wl_surface *surface = static_cast< wl_surface* >(wl_shell_surface_get_user_data(shell_surface));
-	set_frame_listener(surface);
+	set_frame_listener(&egl);
 
 	const uint64_t t0 = timer_ns();
 
-	wl_surface_attach(surface, buffer[0], 0, 0);
-	wl_surface_commit(surface);
+	wl_surface_attach(egl.surface, egl.buffer[0], 0, 0);
+	wl_surface_commit(egl.surface);
 
 	while (wl_display_dispatch(display) != -1) {
-		if (frame_error || frames_done == frames)
+		if (egl.frame_error || egl.frame_count == frames)
 			break;
 	}
 
 	const uint64_t dt = timer_ns() - t0;
-	stream::cout << "total frames rendered: " << frames_done <<
+	stream::cout << "total frames rendered: " << egl.frame_count <<
 		"\ndrawcalls per frame: " << hook::get_num_drawcalls() << '\n';
 
 	if (dt) {
 		const double sec = double(dt) * 1e-9;
 		stream::cout << "elapsed time: " << sec << " s"
-			"\naverage FPS: " << (double(frames_done) / sec) << '\n';
+			"\naverage FPS: " << (double(egl.frame_count) / sec) << '\n';
 	}
 
 	// clean up wayland
-	for (size_t i = 0; i < countof(buffer); ++i) {
-		free_buffer(buffer[i]);
+	for (size_t i = 0; i < countof(egl.buffer); ++i) {
+		wl_buffer_destroy(egl.buffer[i]);
 	}
-	free_surface(shell_surface);
+
+	wl_shell_surface_destroy(shell_surface);
+	wl_surface_destroy(egl.surface);
 	cleanup_wayland();
 
 	return EXIT_SUCCESS;
