@@ -48,7 +48,8 @@ const char arg_app[]    = "app";
 template < typename T >
 class generic_free {
 public:
-	void operator()(T* arg) {
+	void operator()(T* arg)
+	{
 		free(arg);
 	}
 };
@@ -56,7 +57,8 @@ public:
 template <>
 class scoped_functor< FILE > {
 public:
-	void operator()(FILE* arg) {
+	void operator()(FILE* arg)
+	{
 		fclose(arg);
 	}
 };
@@ -212,7 +214,7 @@ struct EGL {
 		return 0;
 	}
 
-	void set_active_framebuffer(const size_t index) const
+	void activate_framebuffer(const size_t index) const
 	{
 		glBindFramebuffer(GL_FRAMEBUFFER, fbo[index]);
 		glViewport(0, 0, window_w, window_h);
@@ -481,14 +483,16 @@ void registry_global(void *data, wl_registry *registry, uint32_t name, const cha
     fprintf(stderr, "%s, %s id %d version %d\n", __FUNCTION__, interface, name, version);
 
 #endif
-	if (strcmp(interface, wl_compositor_interface.name) == 0)
+	if (strcmp(interface, wl_compositor_interface.name) == 0) {
 		compositor = static_cast< wl_compositor* >(wl_registry_bind(registry, name, &wl_compositor_interface, 3));
+	}
 	else if (strcmp(interface, zwp_linux_dmabuf_v1_interface.name) == 0) {
 		dmabuf = static_cast< zwp_linux_dmabuf_v1* >(wl_registry_bind(registry, name, &zwp_linux_dmabuf_v1_interface, 2));
 		zwp_linux_dmabuf_v1_add_listener(dmabuf, &dmabuf_listener, data);
 	}
-	else if (strcmp(interface, wl_shell_interface.name) == 0)
+	else if (strcmp(interface, wl_shell_interface.name) == 0) {
 		shell = static_cast< wl_shell* >(wl_registry_bind(registry, name, &wl_shell_interface, 1));
+	}
 }
 
 void registry_global_remove(void *, wl_registry *, uint32_t)
@@ -540,17 +544,19 @@ wl_buffer *create_buffer_dmabuf(
 	struct wl_buffer *buffer;
 
 	params = zwp_linux_dmabuf_v1_create_params(dmabuf);
-	zwp_linux_buffer_params_v1_add(params,
-	                   dmabuf_fd,
-	                   0, // plane_idx
-	                   0, // offset
-	                   dmabuf_stride,
-	                   0, // modifier_hi
-	                   0); // modifier_lo
+	zwp_linux_buffer_params_v1_add(
+		params,
+		dmabuf_fd,
+		0, // plane_idx
+		0, // offset
+		dmabuf_stride,
+		0, // modifier_hi
+		0); // modifier_lo
 
 	zwp_linux_buffer_params_v1_add_listener(params, &params_listener, NULL);
 
-	buffer = zwp_linux_buffer_params_v1_create_immed(params,
+	buffer = zwp_linux_buffer_params_v1_create_immed(
+		params,
 		width,
 		height,
 		dmabuf_format,
@@ -603,7 +609,7 @@ void redraw(void *data, wl_callback *callback, uint32_t time)
 	const size_t next_buffer_idx = ++egl->frame_count & 1;
 
 	// emit app's next frame into the buffer that was just presented
-	egl->set_active_framebuffer(curr_buffer_idx);
+	egl->activate_framebuffer(curr_buffer_idx);
 
 	wl_buffer *buffer = egl->buffer[next_buffer_idx];
 	wl_surface *surface = egl->surface;
@@ -658,7 +664,7 @@ wl_shell_surface *create_surface(EGL *egl)
 	}
 
 	egl->surface = surface;
-	wl_shell_surface_add_listener(shell_surface, &shell_surface_listener, 0);
+	wl_shell_surface_add_listener(shell_surface, &shell_surface_listener, NULL);
 	wl_shell_surface_set_toplevel(shell_surface);
 	wl_shell_surface_set_user_data(shell_surface, egl);
 	wl_surface_set_user_data(surface, NULL);
