@@ -3,6 +3,8 @@ Description
 
 This is an experiment in self-hosted ChromeOS development focused on OpenGL ES. It relies on the ChromeOS-native GLESv2/EGL/Wayland stacks and as such should run on any ChromeOS device meeting the prerequisites, irrespective of [Crouton](https://github.com/dnschneid/crouton) conditions.
 
+*Warning:* as of R69 RK3399-based chromebooks suffer from a system-wide (incl. not unmountig the filesystem) crash upon exiting the app -- see [ticket #4](https://github.com/blu/hello-chromeos-gles2/issues/4).
+
 ![](asset/screenshot1.png)
 
 Prerequisites
