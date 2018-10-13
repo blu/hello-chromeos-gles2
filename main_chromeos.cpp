@@ -603,22 +603,41 @@ void redraw(void *data, wl_callback *callback, uint32_t time)
 {
 	EGL *egl = static_cast< EGL* >(data);
 
-	const size_t curr_buffer_idx = egl->frame_count & 1;
-	const size_t next_buffer_idx = ++egl->frame_count & 1;
+	int32_t frame_error = egl->frame_error;
+	uint32_t frame_count = egl->frame_count;
 
-	// emit app's next frame into the buffer that was just presented
-	egl->activate_framebuffer(curr_buffer_idx);
+#if QUIRK0001_SYSTEM_CRASH_AT_EXIT == 0
+	// don't draw if an error has occurred
+	if (frame_error)
+		return;
+
+#endif
+	const size_t curr_buffer_idx = frame_count & 1;
+	const size_t next_buffer_idx = ++frame_count & 1;
+	egl->frame_count = frame_count;
 
 	wl_buffer *buffer = egl->buffer[next_buffer_idx];
 	wl_surface *surface = egl->surface;
 	const uint32_t window_w = egl->window_w;
 	const uint32_t window_h = egl->window_h;
 
-	if (!hook::render_frame()) {
+#if QUIRK0001_SYSTEM_CRASH_AT_EXIT
+	// skip rendering if an error has occurred, but keep flipping the buffers indefinitely
+	if (!frame_error) {
+
+#endif
+	// emit app's next frame into the buffer that was just presented
+	egl->activate_framebuffer(curr_buffer_idx);
+
+	if (!hook::render_frame(egl->fbo[curr_buffer_idx])) {
 		egl->frame_error = -1;
 		return;
 	}
 
+#if QUIRK0001_SYSTEM_CRASH_AT_EXIT
+	}
+
+#endif
 #if 0
 	// create a fence sync for next frame
 	if (egl->create_fence_sync(curr_buffer_idx)) {
@@ -1387,8 +1406,13 @@ int main(
 	wl_surface_commit(egl.surface);
 
 	while (wl_display_dispatch(display) != -1) {
-		if (egl.frame_error || egl.frame_count == frames)
+		// redraw iteration has resulted in an error -- break the dispatch loop
+		if (egl.frame_error)
 			break;
+
+		// raise an artificial error to suppress next redraw and break after the next dispatch iteration
+		if (egl.frame_count == frames)
+			egl.frame_error = -1;
 	}
 
 	const uint64_t dt = timer_ns() - t0;
@@ -1401,6 +1425,11 @@ int main(
 			"\naverage FPS: " << (double(egl.frame_count) / sec) << '\n';
 	}
 
+#if QUIRK0001_SYSTEM_CRASH_AT_EXIT
+	// keep the dispatch loop going indefinitely to avoid system crash on RK3399 (ticket #4)
+	while (wl_display_dispatch(display) != -1) {}
+
+#endif
 	// clean up wayland
 	for (size_t i = 0; i < countof(egl.buffer); ++i) {
 		wl_buffer_destroy(egl.buffer[i]);

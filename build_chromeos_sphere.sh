@@ -53,6 +53,14 @@ if [[ ${HOSTTYPE:0:3} == "arm" ]]; then
 		)
 	fi
 
+	# check for RK3399 based on bigLITTLE config
+	if [ `cat /proc/cpuinfo | grep "^CPU part[[:space:]]*: 0xd08" | wc -l` -eq 2 -a \
+	     `cat /proc/cpuinfo | grep "^CPU part[[:space:]]*: 0xd03" | wc -l` -eq 4 ]; then
+		CFLAGS+=(
+			-DQUIRK0001_SYSTEM_CRASH_AT_EXIT
+		)
+	fi
+
 	# clang may fail auto-detecting the host armv7/armv8 cpu on some setups; collect all part numbers
 	UARCH=`cat /proc/cpuinfo | grep "^CPU part" | sed s/^[^[:digit:]]*//`
 

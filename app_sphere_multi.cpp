@@ -765,7 +765,7 @@ matx3 matx3_rotate(
 
 namespace hook {
 
-bool render_frame()
+bool render_frame(GLuint /* prime_fbo */)
 {
 	if (!check_context(__FUNCTION__))
 		return false;
