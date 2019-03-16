@@ -1,0 +1,28 @@
+///essl #version 100
+///glsl #version 150
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// fixed-color fragment shader
+////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if GL_ES == 1
+
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+	precision highp float;
+#else
+	precision mediump float;
+#endif
+
+#define xx_FragColor gl_FragColor 
+
+#else
+out vec4 xx_FragColor;
+
+#endif
+
+uniform vec4 solid_color;
+
+void main()
+{
+	xx_FragColor = solid_color;
+}

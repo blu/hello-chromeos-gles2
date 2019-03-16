@@ -22,7 +22,6 @@ The following Chromebrew packages are required:
 * libwayland
 * wayland_protocols
 * linuxheaders
-* libpng
 
 
 How to Build

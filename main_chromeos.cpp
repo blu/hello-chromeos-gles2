@@ -537,7 +537,7 @@ wl_buffer *create_buffer_dmabuf(
 	uint32_t width,
 	uint32_t height)
 {
-	uint32_t flags = 0; // TODO: ZWP_LINUX_BUFFER_PARAMS_V1_FLAGS_Y_INVERT gets rejected by the server
+	uint32_t flags = ZWP_LINUX_BUFFER_PARAMS_V1_FLAGS_Y_INVERT;
 	struct zwp_linux_buffer_params_v1 *params;
 	struct wl_buffer *buffer;
 
