@@ -1167,7 +1167,7 @@ inline hamilton< NATIVE_T >&
 hamilton< NATIVE_T >::qmulr(
 	const hamilton< NATIVE_T >& src)
 {
-	return *this = hamilton().qmul(*this, src);
+	return this->qmul(*this, src);
 }
 
 
@@ -1176,7 +1176,7 @@ inline hamilton< NATIVE_T >&
 hamilton< NATIVE_T >::qmull(
 	const hamilton< NATIVE_T >& src)
 {
-	return *this = hamilton().qmul(src, *this);
+	return this->qmul(src, *this);
 }
 
 
