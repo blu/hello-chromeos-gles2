@@ -65,7 +65,7 @@ TexDesc g_albedo = { "asset/texture/slate_albedo.raw", 1024, 1024 };
 
 float g_tile = 2.f;
 float g_angle = 0.f;
-float g_angle_step = 0.0125f;
+float g_angle_step = .0125f;
 
 #if PLATFORM_EGL
 EGLDisplay g_display = EGL_NO_DISPLAY;

@@ -61,15 +61,15 @@ struct TexDesc {
 	unsigned h;
 };
 
-TexDesc g_normal = { "asset/texture/slate_normal.raw", 1024, 1024 };
-TexDesc g_albedo = { "asset/texture/slate_albedo.raw", 1024, 1024 };
+TexDesc g_normal = { "asset/texture/chesterfield.raw", 1024, 1024 };
+TexDesc g_albedo = { "asset/texture/navy_blue_scrapbook_paper.raw", 512, 512 };
 
 const unsigned bone_count = 13;
 
 rend::Bone g_bone[bone_count];
 rend::dense_matx4 g_bone_mat[bone_count];
 std::vector< rend::Track > g_skeletal_animation;
-float g_anim_step = 0.0125f;
+float g_anim_step = .0125f;
 bool g_alt_anim;
 
 #if PLATFORM_EGL
@@ -522,14 +522,6 @@ bool init_resources(
 	scoped_ptr< deinit_resources_t, scoped_functor > on_error(deinit_resources);
 
 	/////////////////////////////////////////////////////////////////
-	// set up various patches to the shaders
-
-	const std::string patch[] = {
-		"#if 1 // one-sided lighting",
-		"#if 0 // one-sided lighting"
-	};
-
-	/////////////////////////////////////////////////////////////////
 	// set up misc control bits and values
 
 	glDisable(GL_CULL_FACE);
@@ -585,9 +577,7 @@ bool init_resources(
 	g_shader_frag[PROG_SKIN] = glCreateShader(GL_FRAGMENT_SHADER);
 	assert(g_shader_frag[PROG_SKIN]);
 
-	if (!util::setupShaderWithPatch(g_shader_frag[PROG_SKIN], "asset/shader/phong_bump_tang.glslf",
-			sizeof(patch) / sizeof(patch[0]) / 2, patch))
-	{
+	if (!util::setupShader(g_shader_frag[PROG_SKIN], "asset/shader/phong_bump_tang.glslf")) {
 		stream::cerr << __FUNCTION__ << " failed at setupShader\n";
 		return false;
 	}
