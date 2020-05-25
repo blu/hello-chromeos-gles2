@@ -216,6 +216,14 @@ struct EGL {
 	void activate_framebuffer(const size_t index) const
 	{
 		glBindFramebuffer(GL_FRAMEBUFFER, fbo[index]);
+
+		const GLenum attachments[] = {
+				GL_COLOR_ATTACHMENT0,
+				GL_DEPTH_ATTACHMENT,
+				GL_STENCIL_ATTACHMENT
+		};
+		glDiscardFramebufferEXT(GL_FRAMEBUFFER, GLsizei(sizeof(attachments) / sizeof(attachments[0])), attachments);
+
 		glViewport(0, 0, window_w, window_h);
 	}
 };

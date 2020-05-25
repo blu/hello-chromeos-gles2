@@ -10,6 +10,36 @@
 namespace util {
 
 bool
+fill_indexed_trilist_from_file_P(
+	const char* const filename,
+	const GLuint vbo_arr,
+	const GLuint vbo_idx,
+	unsigned& num_faces,
+	GLenum& index_type,
+	float (&bmin)[3],
+	float (&bmax)[3]);
+
+bool
+fill_indexed_trilist_from_file_PN(
+	const char* const filename,
+	const GLuint vbo_arr,
+	const GLuint vbo_idx,
+	unsigned& num_faces,
+	GLenum& index_type,
+	float (&bmin)[3],
+	float (&bmax)[3]);
+
+bool
+fill_indexed_trilist_from_file_PN2(
+	const char* const filename,
+	const GLuint vbo_arr,
+	const GLuint vbo_idx,
+	unsigned& num_faces,
+	GLenum& index_type,
+	float (&bmin)[3],
+	float (&bmax)[3]);
+
+bool
 fill_indexed_trilist_from_file_ABE(
 	const char* const filename,
 	const GLuint vbo_arr,

@@ -735,9 +735,7 @@ hook::init_resources(
 		(bbox_max[1] - bbox_min[1]) * .5f,
 		(bbox_max[2] - bbox_min[2]) * .5f
 	};
-	const float rcp_extent = 1.f / (extent[0] > extent[1]
-		? (extent[0] > extent[2] ? extent[0] : extent[2])
-		: (extent[1] > extent[2] ? extent[1] : extent[2]));
+	const float rcp_extent = 1.f / fmaxf(fmaxf(extent[0], extent[1]), extent[2]);
 
 	g_matx_fit = simd::matx4(
 		rcp_extent,	0.f,		0.f,		0.f,

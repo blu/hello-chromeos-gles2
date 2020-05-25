@@ -3,6 +3,10 @@
 #include <GLES2/gl2ext.h>
 
 #if GL_GLEXT_PROTOTYPES == 0
+#if GL_EXT_discard_framebuffer
+extern PFNGLDISCARDFRAMEBUFFEREXTPROC glDiscardFramebufferEXT;
+
+#endif // GL_EXT_discard_framebuffer
 #if GL_OES_mapbuffer
 extern PFNGLMAPBUFFEROESPROC         glMapBufferOES;
 extern PFNGLUNMAPBUFFEROESPROC       glUnmapBufferOES;

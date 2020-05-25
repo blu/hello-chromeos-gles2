@@ -4,6 +4,10 @@
 #include <EGL/egl.h>
 
 #if GL_GLEXT_PROTOTYPES == 0
+#if GL_EXT_discard_framebuffer
+PFNGLDISCARDFRAMEBUFFEREXTPROC glDiscardFramebufferEXT;
+
+#endif // GL_EXT_discard_framebuffer
 #if GL_OES_mapbuffer
 PFNGLMAPBUFFEROESPROC         glMapBufferOES;
 PFNGLUNMAPBUFFEROESPROC       glUnmapBufferOES;
@@ -38,6 +42,10 @@ PFNGLGETPOINTERVKHRPROC          glGetPointervKHR;
 #endif
 void init_gles_ext(void) {
 
+#if GL_EXT_discard_framebuffer
+	glDiscardFramebufferEXT = eglGetProcAddress("glDiscardFramebufferEXT");
+
+#endif // GL_EXT_discard_framebuffer
 #if GL_OES_mapbuffer
 	glMapBufferOES         = eglGetProcAddress("glMapBufferOES");
 	glUnmapBufferOES       = eglGetProcAddress("glUnmapBufferOES");
