@@ -34,6 +34,10 @@
 #error rogue iostream acquired
 #endif
 
+#ifndef GL_ES_CONTEXT_VERSION
+#define GL_ES_CONTEXT_VERSION 2
+#endif
+
 namespace stream { // enclosed declarations initialized by main()
 in cin;   // std::cin substitute
 out cout; // std::cout substitute
@@ -218,9 +222,9 @@ struct EGL {
 		glBindFramebuffer(GL_FRAMEBUFFER, fbo[index]);
 
 		const GLenum attachments[] = {
-				GL_COLOR_ATTACHMENT0,
-				GL_DEPTH_ATTACHMENT,
-				GL_STENCIL_ATTACHMENT
+			GL_COLOR_ATTACHMENT0,
+			GL_DEPTH_ATTACHMENT,
+			GL_STENCIL_ATTACHMENT
 		};
 		glDiscardFramebufferEXT(GL_FRAMEBUFFER, GLsizei(sizeof(attachments) / sizeof(attachments[0])), attachments);
 
@@ -917,7 +921,7 @@ bool EGL::initGLES2(
 	eglBindAPI(EGL_OPENGL_ES_API);
 
 	const EGLint context_attr[] = {
-		EGL_CONTEXT_CLIENT_VERSION, 2,
+		EGL_CONTEXT_CLIENT_VERSION, GL_ES_CONTEXT_VERSION,
 		EGL_NONE
 	};
 

@@ -21,6 +21,7 @@ CFLAGS=(
 	-Wunused-variable
 	-Wunused-value
 	-Wno-incompatible-function-pointer-types
+	-DGL_ES_CONTEXT_VERSION=3
 	-DPLATFORM_EGL
 	-DPLATFORM_GLES
 	-DPLATFORM_GL_OES_vertex_array_object

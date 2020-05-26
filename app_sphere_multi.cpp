@@ -3,8 +3,7 @@
 	#include "gles_gl_mapping.hpp"
 #else
 	#include <EGL/egl.h>
-	#include <GLES2/gl2.h>
-	#include <GLES2/gl2ext.h>
+	#include <GLES3/gl3.h>
 	#include "gles_ext.h"
 #endif
 
@@ -145,7 +144,7 @@ bool set_num_drawcalls(
 
 unsigned get_num_drawcalls()
 {
-	return multi_rows * multi_cols;
+	return 1;
 }
 
 bool requires_depth()
@@ -573,7 +572,7 @@ bool init_resources(
 	g_shader_vert[PROG_SPHERE] = glCreateShader(GL_VERTEX_SHADER);
 	assert(g_shader_vert[PROG_SPHERE]);
 
-	if (!util::setupShader(g_shader_vert[PROG_SPHERE], "asset/shader/blinn_bump_tang.glslv")) {
+	if (!util::setupShader(g_shader_vert[PROG_SPHERE], "asset/shader/blinn_bump_tang_instanced.glslv")) {
 		stream::cerr << __FUNCTION__ << " failed at setupShader\n";
 		return false;
 	}
@@ -581,7 +580,7 @@ bool init_resources(
 	g_shader_frag[PROG_SPHERE] = glCreateShader(GL_FRAGMENT_SHADER);
 	assert(g_shader_frag[PROG_SPHERE]);
 
-	if (!util::setupShader(g_shader_frag[PROG_SPHERE], "asset/shader/blinn_bump_tang.glslf")) {
+	if (!util::setupShader(g_shader_frag[PROG_SPHERE], "asset/shader/blinn_bump_tang_instanced.glslf")) {
 		stream::cerr << __FUNCTION__ << " failed at setupShader\n";
 		return false;
 	}
@@ -805,36 +804,102 @@ bool render_frame(GLuint /* prime_fbo */)
 
 	DEBUG_GL_ERR()
 
-	if (-1 != g_uni[PROG_SPHERE][UNI_VP_OBJ]) {
-		const GLfloat nonlocal_viewer[4] = {
-			p1[0][2],
-			p1[1][2],
-			p1[2][2],
-			0.f
-		};
-
-		glUniform4fv(g_uni[PROG_SPHERE][UNI_VP_OBJ], 1, nonlocal_viewer);
-	}
-
-	DEBUG_GL_ERR()
+	/////////////////////////////////////////////////////////////////
+	// set up per-drawcall uniforms
 
 	if (0 != g_tex[TEX_NORMAL] && -1 != g_uni[PROG_SPHERE][UNI_SAMPLER_NORMAL]) {
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, g_tex[TEX_NORMAL]);
 
 		glUniform1i(g_uni[PROG_SPHERE][UNI_SAMPLER_NORMAL], 0);
-	}
 
-	DEBUG_GL_ERR()
+		DEBUG_GL_ERR()
+	}
 
 	if (0 != g_tex[TEX_ALBEDO] && -1 != g_uni[PROG_SPHERE][UNI_SAMPLER_ALBEDO]) {
 		glActiveTexture(GL_TEXTURE1);
 		glBindTexture(GL_TEXTURE_2D, g_tex[TEX_ALBEDO]);
 
 		glUniform1i(g_uni[PROG_SPHERE][UNI_SAMPLER_ALBEDO], 1);
+
+		DEBUG_GL_ERR()
 	}
 
-	DEBUG_GL_ERR()
+	const GLsizei numInstances = multi_rows * multi_cols;
+
+	if (-1 != g_uni[PROG_SPHERE][UNI_VP_OBJ]) {
+		GLfloat nonlocal_viewer[numInstances][4];
+
+		for (size_t i = 0; i < size_t(numInstances); ++i) {
+			new (&nonlocal_viewer[i]) GLfloat[4] {
+				p1[0][2],
+				p1[1][2],
+				p1[2][2],
+				0.f
+			};
+		}
+
+		glUniform4fv(g_uni[PROG_SPHERE][UNI_VP_OBJ], numInstances, reinterpret_cast< const GLfloat* >(nonlocal_viewer));
+
+		DEBUG_GL_ERR()
+	}
+
+	if (-1 != g_uni[PROG_SPHERE][UNI_MVP]) {
+		GLfloat mvp[numInstances][4][4];
+
+		// compose mvp from p1 above and some row/column translation
+		for (size_t multi_y = 0; multi_y < multi_rows; ++multi_y) {
+			for (size_t multi_x = 0; multi_x < multi_cols; ++multi_x) {
+
+				const float aspect = float(vp[3]) / vp[2];
+				const float tx = -1.f + 2.f * (multi_x + .5f) / multi_rows;
+				const float ty = -1.f + 2.f * (multi_y + .5f) / multi_cols;
+
+				// expand mvp to 4x4, sign-inverting z in all original columns (for GL screen space)
+				new (mvp[multi_y * multi_cols + multi_x]) GLfloat[4][4] {
+					{  p1[0][0] * aspect,  p1[0][1], -p1[0][2],  0.f },
+					{  p1[1][0] * aspect,  p1[1][1], -p1[1][2],  0.f },
+					{  p1[2][0] * aspect,  p1[2][1], -p1[2][2],  0.f },
+					{  tx * aspect,        ty,        0.f,       1.f }
+				};
+			}
+		}
+
+		glUniformMatrix4fv(g_uni[PROG_SPHERE][UNI_MVP], numInstances, GL_FALSE, reinterpret_cast< const GLfloat* >(mvp));
+
+		DEBUG_GL_ERR()
+	}
+
+	if (-1 != g_uni[PROG_SPHERE][UNI_LP_OBJ]) {
+		GLfloat local_light[numInstances][4];
+
+		for (size_t multi_y = 0; multi_y < multi_rows; ++multi_y) {
+			for (size_t multi_x = 0; multi_x < multi_cols; ++multi_x) {
+
+				const float dist = 1.5f; // distance along camera z
+				const float tx = -1.f + 2.f * (multi_x + .5f) / multi_rows;
+				const float ty = -1.f + 2.f * (multi_y + .5f) / multi_cols;
+
+				// compute a local (point) light at the specified distance along camera z towards the viewer;
+				// for the purpose, using camera basis in object space, follow the rule for applying
+				// cumulative transformations: (A * B)inv = Binv * Ainv
+				// 1. scale cam_z_obj by the desired distance
+				// 2. scale cam_x_obj and cam_y_obj by the inverse translation
+				// 3. finally, apply the inverse scaling
+				// .. and don't forget to set w = 1 for local light!
+				new (local_light[multi_y * multi_cols + multi_x]) GLfloat[4] {
+					(dist * p1[0][2] - tx * p1[0][0] - ty * p1[0][1]) / scale,
+					(dist * p1[1][2] - tx * p1[1][0] - ty * p1[1][1]) / scale,
+					(dist * p1[2][2] - tx * p1[2][0] - ty * p1[2][1]) / scale,
+					1.f
+				};
+			}
+		}
+
+		glUniform4fv(g_uni[PROG_SPHERE][UNI_LP_OBJ], numInstances, reinterpret_cast< const GLfloat* >(local_light));
+
+		DEBUG_GL_ERR()
+	}
 
 #if PLATFORM_GL_OES_vertex_array_object
 	glBindVertexArrayOES(g_vao[PROG_SPHERE]);
@@ -852,64 +917,9 @@ bool render_frame(GLuint /* prime_fbo */)
 	DEBUG_GL_ERR()
 
 #endif
-	for (size_t multi_y = 0; multi_y < multi_rows; ++multi_y) {
-		for (size_t multi_x = 0; multi_x < multi_cols; ++multi_x) {
+	glDrawElementsInstanced(GL_TRIANGLES, g_num_faces[MESH_SPHERE] * 3, GL_UNSIGNED_SHORT, (void*) 0, numInstances);
 
-			/////////////////////////////////////////////////////////////////
-			// compose mvp from p1 above and some row/column translation
-
-			const float aspect = float(vp[3]) / vp[2];
-			const float tx = -1.f + 2.f * (multi_x + .5f) / multi_rows;
-			const float ty = -1.f + 2.f * (multi_y + .5f) / multi_cols;
-
-			// expand mvp to 4x4, sign-inverting z in all original columns (for GL screen space)
-			const GLfloat mvp[4][4] = {
-				{  p1[0][0] * aspect,  p1[0][1], -p1[0][2],  0.f },
-				{  p1[1][0] * aspect,  p1[1][1], -p1[1][2],  0.f },
-				{  p1[2][0] * aspect,  p1[2][1], -p1[2][2],  0.f },
-				{  tx * aspect,        ty,        0.f,       1.f }
-			};
-
-			/////////////////////////////////////////////////////////////////
-			// set up per-drawcall uniforms
-
-			if (-1 != g_uni[PROG_SPHERE][UNI_MVP]) {
-				glUniformMatrix4fv(g_uni[PROG_SPHERE][UNI_MVP],
-					1, GL_FALSE, reinterpret_cast< const GLfloat* >(mvp));
-			}
-
-			DEBUG_GL_ERR()
-
-			if (-1 != g_uni[PROG_SPHERE][UNI_LP_OBJ]) {
-				const float dist = 1.5f; // distance along camera z
-
-				// compute a local (point) light at the specified distance along camera z towards the viewer;
-				// for the purpose, using camera basis in object space, follow the rule for applying
-				// cumulative transformations: (A * B)inv = Binv * Ainv
-				// 1. scale cam_z_obj by the desired distance
-				// 2. scale cam_x_obj and cam_y_obj by the inverse translation
-				// 3. finally, apply the inverse scaling
-				// .. and don't forget to set w = 1 for local light!
-				const GLfloat local_light[4] = {
-					(dist * p1[0][2] - tx * p1[0][0] - ty * p1[0][1]) / scale,
-					(dist * p1[1][2] - tx * p1[1][0] - ty * p1[1][1]) / scale,
-					(dist * p1[2][2] - tx * p1[2][0] - ty * p1[2][1]) / scale,
-					1.f
-				};
-
-				glUniform4fv(g_uni[PROG_SPHERE][UNI_LP_OBJ], 1, local_light);
-			}
-
-			DEBUG_GL_ERR()
-
-			/////////////////////////////////////////////////////////////////
-			// draw the geometry asset
-
-			glDrawElements(GL_TRIANGLES, g_num_faces[MESH_SPHERE] * 3, GL_UNSIGNED_SHORT, (void*) 0);
-
-			DEBUG_GL_ERR()
-		}
-	}
+	DEBUG_GL_ERR()
 
 #if PLATFORM_GL_OES_vertex_array_object == 0
 	/////////////////////////////////////////////////////////////////

@@ -7,19 +7,6 @@
 	#include <GLES2/gl2.h>
 	#include <GLES2/gl2ext.h>
 	#include "gles_ext.h"
-
-	#if GL_OES_depth_texture == 0
-	#error Missing required extension GL_OES_depth_texture.
-	#endif
-
-	#if GL_OES_depth24 == 0
-	#error Missing required extension GL_OES_depth24.
-	#endif
-
-	#if GL_OES_packed_depth_stencil == 0
-	#error Missing required extension GL_OES_packed_depth_stencil.
-	#endif
-
 #endif // PLATFORM_GL
 #include <unistd.h>
 #include <stdio.h>
