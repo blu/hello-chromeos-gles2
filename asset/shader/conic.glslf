@@ -11,9 +11,8 @@
 #endif
 #endif
 
-const int strip_len = 8; // power of two
-const int segment_total = strip_len * 2; // total segment count, multiple of strip_len -- app-consolidated
-uniform vec4 segment[segment_total]; // line strips; each pair of subsequent points within a strip delimits a capsule
+const int strip_len = 18;
+uniform vec4 segment[strip_len + 1]; // line strips; each pair of subsequent points within a strip delimits a capsule
 
 in vec2 proj_coord_i;
 out vec4 xx_FragColor;
@@ -83,20 +82,18 @@ void main() {
 	vec3 n  = vec3(0, 0, 0);
 	float tmin = 42.0;
 
-	for (int si = 0; si < segment_total; si += strip_len) {
-		for (int i = 0; i < strip_len; ) {
-			vec3 pa = segment[si + i].xyz;
-			float r = segment[si + i].w;
-			vec3 pb = segment[si + ++i % strip_len].xyz;
+	for (int i = 0; i < strip_len; ) {
+		vec3 pa = segment[i].xyz;
+		float r = segment[i].w;
+		vec3 pb = segment[++i].xyz;
 
-			float t = intersect(ro, rd, pa, pb, r);
+		float t = intersect(ro, rd, pa, pb, r);
 
-			if (t > 0.0 && t < tmin) {
-				n = normal(ro + rd * t, pa, pb, r);
-				tmin = t;
-			}
+		if (t > 0.0 && t < tmin) {
+			n = normal(ro + rd * t, pa, pb, r);
+			tmin = t;
 		}
 	}
 
-	xx_FragColor = vec4(n * 0.5 + 0.5, 1.0);
+	xx_FragColor = vec4((n * 0.5 + 0.5) * (2.f - tmin) / 2.f, 1.0);
 }
