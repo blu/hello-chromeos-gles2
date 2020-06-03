@@ -1051,13 +1051,15 @@ hook::render_frame(GLuint prime_fbo)
 	if (-1 != g_uni[PROG_SHADOW][UNI_MVP]) {
 		glUniformMatrix4fv(g_uni[PROG_SHADOW][UNI_MVP],
 			1, GL_FALSE, static_cast< const GLfloat* >(dense_mvp_lit));
-	}
 
-	DEBUG_GL_ERR()
+		DEBUG_GL_ERR()
+	}
 
 	if (-1 != g_uni[PROG_SHADOW][UNI_BONE]) {
 		glUniformMatrix4fv(g_uni[PROG_SHADOW][UNI_BONE],
 			g_bone_count, GL_FALSE, static_cast< const GLfloat* >(g_bone_mat[0]));
+
+		DEBUG_GL_ERR()
 	}
 
 #if PLATFORM_GL_OES_vertex_array_object
@@ -1106,23 +1108,23 @@ hook::render_frame(GLuint prime_fbo)
 	if (-1 != g_uni[PROG_SKIN][UNI_MVP]) {
 		glUniformMatrix4fv(g_uni[PROG_SKIN][UNI_MVP],
 			1, GL_FALSE, static_cast< const GLfloat* >(dense_mvp));
-	}
 
-	DEBUG_GL_ERR()
+		DEBUG_GL_ERR()
+	}
 
 	if (-1 != g_uni[PROG_SKIN][UNI_MVP_LIT]) {
 		glUniformMatrix4fv(g_uni[PROG_SKIN][UNI_MVP_LIT],
 			1, GL_FALSE, static_cast< const GLfloat* >(dense_biased_lit));
-	}
 
-	DEBUG_GL_ERR()
+		DEBUG_GL_ERR()
+	}
 
 	if (-1 != g_uni[PROG_SKIN][UNI_BONE]) {
 		glUniformMatrix4fv(g_uni[PROG_SKIN][UNI_BONE],
 			g_bone_count, GL_FALSE, static_cast< const GLfloat* >(g_bone_mat[0]));
-	}
 
-	DEBUG_GL_ERR()
+		DEBUG_GL_ERR()
+	}
 
 	if (-1 != g_uni[PROG_SKIN][UNI_LP_OBJ]) {
 		const GLfloat nonlocal_light[4] = {
@@ -1133,9 +1135,9 @@ hook::render_frame(GLuint prime_fbo)
 		};
 
 		glUniform4fv(g_uni[PROG_SKIN][UNI_LP_OBJ], 1, nonlocal_light);
-	}
 
-	DEBUG_GL_ERR()
+		DEBUG_GL_ERR()
+	}
 
 	if (-1 != g_uni[PROG_SKIN][UNI_VP_OBJ]) {
 		const GLfloat nonlocal_viewer[4] = {
@@ -1146,36 +1148,36 @@ hook::render_frame(GLuint prime_fbo)
 		};
 
 		glUniform4fv(g_uni[PROG_SKIN][UNI_VP_OBJ], 1, nonlocal_viewer);
-	}
 
-	DEBUG_GL_ERR()
+		DEBUG_GL_ERR()
+	}
 
 	if (0 != g_tex[TEX_NORMAL] && -1 != g_uni[PROG_SKIN][UNI_SAMPLER_NORMAL]) {
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, g_tex[TEX_NORMAL]);
 
 		glUniform1i(g_uni[PROG_SKIN][UNI_SAMPLER_NORMAL], 0);
-	}
 
-	DEBUG_GL_ERR()
+		DEBUG_GL_ERR()
+	}
 
 	if (0 != g_tex[TEX_ALBEDO] && -1 != g_uni[PROG_SKIN][UNI_SAMPLER_ALBEDO]) {
 		glActiveTexture(GL_TEXTURE1);
 		glBindTexture(GL_TEXTURE_2D, g_tex[TEX_ALBEDO]);
 
 		glUniform1i(g_uni[PROG_SKIN][UNI_SAMPLER_ALBEDO], 1);
-	}
 
-	DEBUG_GL_ERR()
+		DEBUG_GL_ERR()
+	}
 
 	if (0 != g_tex[TEX_SHADOW] && -1 != g_uni[PROG_SKIN][UNI_SAMPLER_SHADOW]) {
 		glActiveTexture(GL_TEXTURE2);
 		glBindTexture(GL_TEXTURE_2D, g_tex[TEX_SHADOW]);
 
 		glUniform1i(g_uni[PROG_SKIN][UNI_SAMPLER_SHADOW], 2);
-	}
 
-	DEBUG_GL_ERR()
+		DEBUG_GL_ERR()
+	}
 
 #if PLATFORM_GL_OES_vertex_array_object
 	glBindVertexArrayOES(g_vao[PROG_SKIN]);
@@ -1216,17 +1218,17 @@ hook::render_frame(GLuint prime_fbo)
 	if (-1 != g_uni[PROG_SKEL][UNI_MVP]) {
 		glUniformMatrix4fv(g_uni[PROG_SKEL][UNI_MVP],
 			1, GL_FALSE, static_cast< const GLfloat* >(dense_mvp));
-	}
 
-	DEBUG_GL_ERR()
+		DEBUG_GL_ERR()
+	}
 
 	if (-1 != g_uni[PROG_SKEL][UNI_SOLID_COLOR]) {
 		const GLfloat solid_color[4] = { 0.f, 1.f, 0.f, 1.f };
 
 		glUniform4fv(g_uni[PROG_SKEL][UNI_SOLID_COLOR], 1, solid_color);
-	}
 
-	DEBUG_GL_ERR()
+		DEBUG_GL_ERR()
+	}
 
 #if PLATFORM_GL_OES_vertex_array_object
 	glBindVertexArrayOES(g_vao[PROG_SKEL]);

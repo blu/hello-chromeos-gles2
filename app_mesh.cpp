@@ -599,9 +599,9 @@ hook::render_frame(GLuint /* prime_fbo */)
 	if (-1 != g_uni[PROG_SKIN][UNI_MVP]) {
 		glUniformMatrix4fv(g_uni[PROG_SKIN][UNI_MVP],
 			1, GL_FALSE, static_cast< const GLfloat* >(dense_mvp));
-	}
 
-	DEBUG_GL_ERR()
+		DEBUG_GL_ERR()
+	}
 
 	if (-1 != g_uni[PROG_SKIN][UNI_LP_OBJ]) {
 		const GLfloat nonlocal_light[4] = {
@@ -612,9 +612,9 @@ hook::render_frame(GLuint /* prime_fbo */)
 		};
 
 		glUniform4fv(g_uni[PROG_SKIN][UNI_LP_OBJ], 1, nonlocal_light);
-	}
 
-	DEBUG_GL_ERR()
+		DEBUG_GL_ERR()
+	}
 
 	if (-1 != g_uni[PROG_SKIN][UNI_VP_OBJ]) {
 		const GLfloat nonlocal_viewer[4] = {
@@ -625,9 +625,9 @@ hook::render_frame(GLuint /* prime_fbo */)
 		};
 
 		glUniform4fv(g_uni[PROG_SKIN][UNI_VP_OBJ], 1, nonlocal_viewer);
-	}
 
-	DEBUG_GL_ERR()
+		DEBUG_GL_ERR()
+	}
 
 #if PLATFORM_GL_OES_vertex_array_object
 	glBindVertexArrayOES(g_vao[PROG_SKIN]);
