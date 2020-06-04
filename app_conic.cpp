@@ -42,19 +42,19 @@ struct Vertex {
 
 } // namespace
 
-namespace hook {
+namespace { // anonymous
 
-static const char* arg_prefix    = "-";
-static const char* arg_app       = "app";
+const char* arg_prefix    = "-";
+const char* arg_app       = "app";
 
-static const char* arg_anim_step = "anim_step";
+const char* arg_anim_step = "anim_step";
 
-static float g_angle = 0.f;
-static float g_angle_step = .0125f;
+float g_angle = 0.f;
+float g_angle_step = .0125f;
 
 #if PLATFORM_EGL
-static EGLDisplay g_display = EGL_NO_DISPLAY;
-static EGLContext g_context = EGL_NO_CONTEXT;
+EGLDisplay g_display = EGL_NO_DISPLAY;
+EGLContext g_context = EGL_NO_CONTEXT;
 
 #endif
 enum {
@@ -87,20 +87,24 @@ enum {
 	VBO_FORCE_UINT = -1U
 };
 
-static GLint g_uni[PROG_COUNT][UNI_COUNT];
+GLint g_uni[PROG_COUNT][UNI_COUNT];
 
 #if PLATFORM_GL_OES_vertex_array_object
-static GLuint g_vao[PROG_COUNT];
+GLuint g_vao[PROG_COUNT];
 
 #endif
-static GLuint g_vbo[VBO_COUNT];
-static GLuint g_shader_vert[PROG_COUNT];
-static GLuint g_shader_frag[PROG_COUNT];
-static GLuint g_shader_prog[PROG_COUNT];
+GLuint g_vbo[VBO_COUNT];
+GLuint g_shader_vert[PROG_COUNT];
+GLuint g_shader_frag[PROG_COUNT];
+GLuint g_shader_prog[PROG_COUNT];
 
-static unsigned g_num_faces[MESH_COUNT];
+unsigned g_num_faces[MESH_COUNT];
 
-static rend::ActiveAttrSemantics g_active_attr_semantics[PROG_COUNT];
+rend::ActiveAttrSemantics g_active_attr_semantics[PROG_COUNT];
+
+} // namespace anonymous
+
+namespace hook {
 
 bool set_num_drawcalls(
 	const unsigned)
@@ -545,15 +549,17 @@ bool render_frame(GLuint /* prime_fbo */)
 
 	DEBUG_GL_ERR()
 
-	if (-1 != g_uni[PROG_CONIC][UNI_ASPECT])
+	if (-1 != g_uni[PROG_CONIC][UNI_ASPECT]) {
 		glUniform1f(g_uni[PROG_CONIC][UNI_ASPECT], GLfloat(aspect));
 
-	DEBUG_GL_ERR()
+		DEBUG_GL_ERR()
+	}
 
-	if (-1 != g_uni[PROG_CONIC][UNI_SEGMENT])
+	if (-1 != g_uni[PROG_CONIC][UNI_SEGMENT]) {
 		glUniform4fv(g_uni[PROG_CONIC][UNI_SEGMENT], sizeof(segTransformed) / sizeof(segTransformed[0]), segTransformed[0]);
 
-	DEBUG_GL_ERR()
+		DEBUG_GL_ERR()
+	}
 
 	for (unsigned i = 0; i < g_active_attr_semantics[PROG_CONIC].num_active_attr; ++i)
 		glEnableVertexAttribArray(g_active_attr_semantics[PROG_CONIC].active_attr[i]);

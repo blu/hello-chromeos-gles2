@@ -62,14 +62,6 @@ float g_angle;
 float g_angle_step = .0125f;
 simd::matx4 g_matx_fit;
 
-} // namespace
-
-namespace anim {
-
-} // namespace anim
-
-namespace { // anonymous
-
 #if PLATFORM_EGL
 EGLDisplay g_display = EGL_NO_DISPLAY;
 EGLContext g_context = EGL_NO_CONTEXT;
