@@ -4,8 +4,7 @@
 	#include "gles_gl_mapping.hpp"
 #else
 	#include <EGL/egl.h>
-	#include <GLES2/gl2.h>
-	#include <GLES2/gl2ext.h>
+	#include <GLES3/gl3.h>
 	#include "gles_ext.h"
 
 	#if GL_OES_depth_texture == 0
@@ -200,7 +199,6 @@ GLuint g_vao[PROG_COUNT];
 
 #endif
 GLuint g_fbo; // single
-GLuint g_rb; // single
 GLuint g_tex[TEX_COUNT];
 GLuint g_vbo[VBO_COUNT];
 GLuint g_shader_vert[PROG_COUNT];
@@ -392,9 +390,6 @@ hook::deinit_resources()
 
 	glDeleteFramebuffers(1, &g_fbo);
 	g_fbo = 0;
-
-	glDeleteRenderbuffers(1, &g_rb);
-	g_rb = 0;
 
 	glDeleteTextures(sizeof(g_tex) / sizeof(g_tex[0]), g_tex);
 	memset(g_tex, 0, sizeof(g_tex));
@@ -829,19 +824,6 @@ hook::init_resources(
 
 	glBindFramebuffer(GL_FRAMEBUFFER, g_fbo);
 
-	glGenRenderbuffers(1, &g_rb);
-	assert(g_rb);
-
-	glBindRenderbuffer(GL_RENDERBUFFER, g_rb);
-	glRenderbufferStorage(GL_RENDERBUFFER, GL_RGB565, g_fbo_res, g_fbo_res);
-	glBindRenderbuffer(GL_RENDERBUFFER, 0);
-
-	if (util::reportGLError()) {
-		stream::cerr << __FUNCTION__ << " failed at renderbuffer setup\n";
-		return false;
-	}
-
-	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, g_rb);
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, g_tex[TEX_SHADOW], 0);
 
 #if DEPTH_PRECISION_24
@@ -854,6 +836,10 @@ hook::init_resources(
 		stream::cerr << __FUNCTION__ << " failed at glCheckFramebufferStatus\n";
 		return false;
 	}
+
+	glDrawBuffers(0, nullptr);
+
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
 	on_error.reset();
 	return true;
@@ -1041,7 +1027,6 @@ hook::render_frame(GLuint prime_fbo)
 	glEnable(GL_DEPTH_TEST);
 	glEnable(GL_POLYGON_OFFSET_FILL);
 
-	glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
 	glClear(GL_DEPTH_BUFFER_BIT);
 
 	glUseProgram(g_shader_prog[PROG_SHADOW]);
@@ -1098,7 +1083,6 @@ hook::render_frame(GLuint prime_fbo)
 
 	glDisable(GL_POLYGON_OFFSET_FILL);
 
-	glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	glUseProgram(g_shader_prog[PROG_SKIN]);
