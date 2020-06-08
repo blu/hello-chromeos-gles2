@@ -22,9 +22,6 @@
 #include "vectsimd.hpp"
 #include "rendIndexedTrilist.hpp"
 #include "rendSkeleton.hpp"
-#if 0
-#include "util_tex.hpp"
-#endif
 #include "util_misc.hpp"
 #include "pure_macro.hpp"
 #include "stream.hpp"

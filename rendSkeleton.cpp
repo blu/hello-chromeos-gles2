@@ -581,13 +581,11 @@ static bool loadBoneOgre(
 {
 	uint16_t bone_chunk_id;
 
-#if 0
 	if (1 != fread(&bone_chunk_id, sizeof(bone_chunk_id), 1, file) || 0x2000 != bone_chunk_id) {
 		fprintf(stderr, "%s encountered non-bone\n", __FUNCTION__);
 		return false;
 	}
 
-#endif
 	uint32_t bone_chunk_size;
 	if (1 != fread(&bone_chunk_size, sizeof(bone_chunk_size), 1, file)) {
 		fprintf(stderr, "%s could not read chunk size\n", __FUNCTION__);
@@ -672,13 +670,11 @@ static bool loadBoneParentOgre(
 {
 	uint16_t parent_chunk_id;
 
-#if 0
 	if (1 != fread(&parent_chunk_id, sizeof(parent_chunk_id), 1, file) || 0x3000 != parent_chunk_id) {
 		fprintf(stderr, "%s encountered non-bone-parent\n", __FUNCTION__);
 		return false;
 	}
 
-#endif
 	uint32_t parent_chunk_size;
 	if (1 != fread(&parent_chunk_size, sizeof(parent_chunk_size), 1, file)) {
 		fprintf(stderr, "%s could not read chunk size\n", __FUNCTION__);
@@ -864,13 +860,11 @@ static bool loadAnimationOgre(
 {
 	uint16_t anim_chunk_id;
 
-#if 0
 	if (1 != fread(&anim_chunk_id, sizeof(anim_chunk_id), 1, file) || 0x4000 != anim_chunk_id) {
 		fprintf(stderr, "%s encountered non-animation\n", __FUNCTION__);
 		return false;
 	}
 
-#endif
 	uint32_t anim_chunk_size;
 	if (1 != fread(&anim_chunk_size, sizeof(anim_chunk_size), 1, file) ||
 		sizeof(anim_chunk_id) + sizeof(anim_chunk_size) >= anim_chunk_size) {
