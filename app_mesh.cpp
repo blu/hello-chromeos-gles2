@@ -329,10 +329,10 @@ hook::init_resources(
 
 	glEnable(GL_CULL_FACE);
 
-	const GLclampf red = .25f;
-	const GLclampf green = .25f;
-	const GLclampf blue = .25f;
-	const GLclampf alpha = 1.f;
+	const GLclampf red = 0.f;
+	const GLclampf green = 0.f;
+	const GLclampf blue = 0.f;
+	const GLclampf alpha = 0.f;
 
 	glClearColor(red, green, blue, alpha);
 	glClearDepthf(1.f);
@@ -544,7 +544,7 @@ hook::render_frame(GLuint /* prime_fbo */)
 
 	g_angle += g_angle_step;
 
-	const float z_offset = -2.125f;
+	const float z_offset = -2.375f;
 	const simd::vect4 translate(0.f, 0.f, z_offset, 0.f);
 
 	simd::matx4 mv = simd::matx4().mul(g_matx_fit, p1);
