@@ -53,10 +53,12 @@ const char arg_app[]       = "app";
 
 const char arg_anim_step[] = "anim_step";
 const char arg_mesh[]      = "mesh";
+const char arg_rot_axes[]  = "rot_axes";
 
 const char* g_mesh_filename = "asset/mesh/tetra.mesh";
 float g_angle;
 float g_angle_step = .0125f;
+float g_rot_axis[] = { 1.f, 1.f, 1.f };
 simd::matx4 g_matx_fit;
 
 #if PLATFORM_EGL
@@ -163,6 +165,19 @@ static bool parse_cli(
 					continue;
 				}
 			}
+			else
+			if (i + 3 < argc && !strcmp(argv[i], arg_rot_axes)) {
+				unsigned axis[3];
+				if (1 == sscanf(argv[i + 1], "%u", axis + 0) &&
+				    1 == sscanf(argv[i + 2], "%u", axis + 1) &&
+				    1 == sscanf(argv[i + 3], "%u", axis + 2)) {
+					g_rot_axis[0] = axis[0] ? 1.f : 0.f;
+					g_rot_axis[1] = axis[1] ? 1.f : 0.f;
+					g_rot_axis[2] = axis[2] ? 1.f : 0.f;
+					i += 3;
+					continue;
+				}
+			}
 		}
 
 		cli_err = true;
@@ -173,7 +188,9 @@ static bool parse_cli(
 			"\t" << arg_prefix << arg_app << " " << arg_mesh <<
 			" <filename>\t\t\t\t: use specified mesh file of coordinates and indices\n"
 			"\t" << arg_prefix << arg_app << " " << arg_anim_step <<
-			" <step>\t\t\t\t: use specified animation step; entire animation is 1.0\n\n";
+			" <step>\t\t\t\t: use specified animation step; entire animation is 1.0\n"
+			"\t" << arg_prefix << arg_app << " " << arg_rot_axes <<
+			" <int> <int> <int>\t\t\t: rotate mesh around the specified mask for x, y and z axes; default is 1 1 1 -- all axes\n\n";
 	}
 
 	return !cli_err;
@@ -535,9 +552,9 @@ hook::render_frame(GLuint /* prime_fbo */)
 	if (!check_context(__FUNCTION__))
 		return false;
 
-	const simd::matx4 r0 = matx4_rotate(g_angle - M_PI_2, 1.f, 0.f, 0.f);
-	const simd::matx4 r1 = matx4_rotate(g_angle,          0.f, 1.f, 0.f);
-	const simd::matx4 r2 = matx4_rotate(g_angle,          0.f, 0.f, 1.f);
+	const simd::matx4 r0 = matx4_rotate(g_rot_axis[0] * g_angle, 1.f, 0.f, 0.f);
+	const simd::matx4 r1 = matx4_rotate(g_rot_axis[1] * g_angle, 0.f, 1.f, 0.f);
+	const simd::matx4 r2 = matx4_rotate(g_rot_axis[2] * g_angle, 0.f, 0.f, 1.f);
 
 	const simd::matx4 p0 = simd::matx4().mul(r0, r1);
 	const simd::matx4 p1 = simd::matx4().mul(p0, r2);
