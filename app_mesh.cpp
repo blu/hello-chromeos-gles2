@@ -547,7 +547,7 @@ public:
 } // namespace
 
 bool
-hook::render_frame(GLuint /* prime_fbo */)
+hook::render_frame(GLuint /* primary_fbo */)
 {
 	if (!check_context(__FUNCTION__))
 		return false;

@@ -49,7 +49,7 @@ bool init_resources(
 
 bool deinit_resources();
 bool requires_depth();
-bool render_frame(GLuint prime_fbo);
+bool render_frame(GLuint primary_fbo);
 bool set_num_drawcalls(const unsigned);
 unsigned get_num_drawcalls();
 

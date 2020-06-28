@@ -489,7 +489,7 @@ static matx3 matx3_rotate(
 		z * x - cos_a * (z * x) + sin_a * y, z * y - cos_a * (z * y) - sin_a * x, z * z + cos_a * (1 - z * z));
 }
 
-bool render_frame(GLuint /* prime_fbo */)
+bool render_frame(GLuint /* primary_fbo */)
 {
 	if (!check_context(__FUNCTION__))
 		return false;

@@ -891,7 +891,7 @@ public:
 };
 
 bool
-hook::render_frame(GLuint prime_fbo)
+hook::render_frame(GLuint primary_fbo)
 {
 	if (!check_context(__FUNCTION__))
 		return false;
@@ -1076,7 +1076,7 @@ hook::render_frame(GLuint prime_fbo)
 	/////////////////////////////////////////////////////////////////
 	// render the geometric asset into the main framebuffer
 
-	glBindFramebuffer(GL_FRAMEBUFFER, prime_fbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, primary_fbo);
 	glViewport(vp[0], vp[1], vp[2], vp[3]);
 
 	DEBUG_GL_ERR()
