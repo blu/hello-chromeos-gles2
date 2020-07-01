@@ -1382,7 +1382,7 @@ int main(
 	if (0 == frames)
 		return EXIT_SUCCESS;
 
-	// create a dummy fence sync for buffer1
+	// create a dummy fence sync for buffer[1]
 	if (egl.create_fence_sync(1)) {
 		stream::cerr << "Error creating fence sync\n";
 		return EXIT_FAILURE;
