@@ -17,10 +17,10 @@
 #include <math.h>
 
 #include "scoped.hpp"
+#include "stream.hpp"
 #include "util_tex.hpp"
 #include "util_misc.hpp"
 #include "pure_macro.hpp"
-#include "stream.hpp"
 
 #include "rendVertAttr.hpp"
 
@@ -222,9 +222,11 @@ bool parse_cli(
 }
 
 template < typename T >
-class generic_free {
+class generic_free
+{
 public:
-	void operator()(T* arg) {
+	void operator()(T* arg)
+	{
 		free(arg);
 	}
 };
@@ -806,8 +808,7 @@ bool render_frame(GLuint /* primary_fbo */)
 	DEBUG_GL_ERR()
 
 	if (-1 != g_uni[PROG_SPHERE][UNI_MVP]) {
-		glUniformMatrix4fv(g_uni[PROG_SPHERE][UNI_MVP],
-			1, GL_FALSE, reinterpret_cast< const GLfloat* >(mvp));
+		glUniformMatrix4fv(g_uni[PROG_SPHERE][UNI_MVP], 1, GL_FALSE, reinterpret_cast< const GLfloat* >(mvp));
 
 		DEBUG_GL_ERR()
 	}

@@ -19,12 +19,12 @@
 #include <sstream>
 
 #include "scoped.hpp"
+#include "stream.hpp"
 #include "vectsimd.hpp"
 #include "rendIndexedTrilist.hpp"
 #include "rendSkeleton.hpp"
 #include "util_misc.hpp"
 #include "pure_macro.hpp"
-#include "stream.hpp"
 
 #include "rendVertAttr.hpp"
 

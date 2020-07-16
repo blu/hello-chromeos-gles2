@@ -17,10 +17,10 @@
 #include <math.h>
 
 #include "scoped.hpp"
+#include "stream.hpp"
 #include "util_tex.hpp"
 #include "util_misc.hpp"
 #include "pure_macro.hpp"
-#include "stream.hpp"
 
 #include "rendVertAttr.hpp"
 
