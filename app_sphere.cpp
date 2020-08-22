@@ -860,6 +860,8 @@ bool render_frame(GLuint /* primary_fbo */)
 #if PLATFORM_GL_OES_vertex_array_object
 	glBindVertexArrayOES(g_vao[PROG_SPHERE]);
 
+	DEBUG_GL_ERR()
+
 #else
 	/////////////////////////////////////////////////////////////////
 	// no VAO: re-bind the VBOs and enable all mapped vertex attribs
@@ -879,15 +881,12 @@ bool render_frame(GLuint /* primary_fbo */)
 
 #if PLATFORM_GL_OES_vertex_array_object == 0
 	/////////////////////////////////////////////////////////////////
-	// no VAO: disable all mapped vertex attribs and unbind VBOs
+	// no VAO: disable all mapped vertex attribs
 
 	for (unsigned i = 0; i < g_active_attr_semantics[PROG_SPHERE].num_active_attr; ++i)
 		glDisableVertexAttribArray(g_active_attr_semantics[PROG_SPHERE].active_attr[i]);
 
 	DEBUG_GL_ERR()
-
-	glBindBuffer(GL_ARRAY_BUFFER, 0);
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 
 #endif
 	return true;

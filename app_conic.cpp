@@ -375,6 +375,18 @@ bool init_resources(
 		return false;
 	}
 
+#if PLATFORM_GL_OES_vertex_array_object
+	/////////////////////////////////////////////////////////////////
+	// if VAO: the final step of enabling the mapped attrib inputs
+
+	for (unsigned i = 0; i < g_active_attr_semantics[PROG_CONIC].num_active_attr; ++i)
+		glEnableVertexAttribArray(g_active_attr_semantics[PROG_CONIC].active_attr[i]);
+
+	DEBUG_GL_ERR()
+
+	glBindVertexArrayOES(0);
+
+#endif
 	on_error.reset();
 	return true;
 }
@@ -561,20 +573,38 @@ bool render_frame(GLuint /* primary_fbo */)
 		DEBUG_GL_ERR()
 	}
 
+#if PLATFORM_GL_OES_vertex_array_object
+	glBindVertexArrayOES(g_vao[PROG_CONIC]);
+
+	DEBUG_GL_ERR()
+
+#else
+	/////////////////////////////////////////////////////////////////
+	// no VAO: re-bind the VBOs and enable all mapped vertex attribs
+
+	glBindBuffer(GL_ARRAY_BUFFER, g_vbo[VBO_CONIC_VTX]);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, g_vbo[VBO_CONIC_IDX]);
+
 	for (unsigned i = 0; i < g_active_attr_semantics[PROG_CONIC].num_active_attr; ++i)
 		glEnableVertexAttribArray(g_active_attr_semantics[PROG_CONIC].active_attr[i]);
 
 	DEBUG_GL_ERR()
 
+#endif
 	glDrawElements(GL_TRIANGLE_STRIP, g_num_faces[MESH_CONIC] - 1 + 3, GL_UNSIGNED_SHORT, (void*) 0);
 
 	DEBUG_GL_ERR()
+
+#if PLATFORM_GL_OES_vertex_array_object == 0
+	/////////////////////////////////////////////////////////////////
+	// no VAO: disable all mapped vertex attribs
 
 	for (unsigned i = 0; i < g_active_attr_semantics[PROG_CONIC].num_active_attr; ++i)
 		glDisableVertexAttribArray(g_active_attr_semantics[PROG_CONIC].active_attr[i]);
 
 	DEBUG_GL_ERR()
 
+#endif
 	return true;
 }
 
