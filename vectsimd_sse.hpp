@@ -2,7 +2,7 @@
 #define vect_simd_sse_H__
 
 #include <stdint.h>
-#include "cmath_fix"
+#include <cmath>
 #include <cassert>
 #include "vectbase_sse.hpp"
 

@@ -26,7 +26,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <assert.h>
-#include "cmath_fix"
+#include <cmath>
 #include <string>
 #include <sstream>
 

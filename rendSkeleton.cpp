@@ -1,6 +1,6 @@
 #include <stdint.h>
 #include <stdio.h>
-#include "cmath_fix"
+#include <cmath>
 #include <iostream>
 #include <iomanip>
 
