@@ -754,8 +754,8 @@ static int create_drm_dumb_bo(
 	assert(size);
 
 	struct drm_mode_create_dumb create_request = {
-		.width  = width,
 		.height = height,
+		.width  = width,
 		.bpp    = bpp
 	};
 	const int ret = ioctl(drm_fd, DRM_IOCTL_MODE_CREATE_DUMB, &create_request);
