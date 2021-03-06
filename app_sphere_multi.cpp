@@ -659,7 +659,7 @@ bool init_resources(
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 
 	/////////////////////////////////////////////////////////////////
-	// produce some geometrical asset and put that in the VBOs
+	// produce some geometric asset and put that in the VBOs
 
 	if (!createIndexedPolarSphere(
 			g_vbo[VBO_SPHERE_VTX],

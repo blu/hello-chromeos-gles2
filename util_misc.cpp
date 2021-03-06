@@ -12,10 +12,12 @@
 #include "util_file.hpp"
 #include "util_misc.hpp"
 #include "scoped.hpp"
-#include "pure_macro.hpp"
 #include "stream.hpp"
+#include "pure_macro.hpp"
 
 using util::scoped_ptr;
+
+namespace { // anonymous
 
 template < typename T >
 class generic_free
@@ -27,7 +29,7 @@ public:
 	}
 };
 
-static bool setupShaderFromString(
+bool setupShaderFromString(
 	const GLuint shader_name,
 	const char* const source,
 	const size_t length)
@@ -120,6 +122,8 @@ static bool setupShaderFromString(
 
 	return true;
 }
+
+} // namespace
 
 bool util::setupShader(
 	const GLuint shader_name,

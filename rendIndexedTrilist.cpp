@@ -16,8 +16,8 @@
 #include <vector>
 
 #include "scoped.hpp"
-#include "rendIndexedTrilist.hpp"
 #include "stream.hpp"
+#include "rendIndexedTrilist.hpp"
 
 #ifndef MESH_INDEX_START
 #define MESH_INDEX_START 0
@@ -673,7 +673,7 @@ fill_indexed_trilist_from_file_ABE(
 	}
 
 	stream::cout << "number of vertices: " << num_vertices <<
-		"\nnumber of indices: " << num_indices <<'\n';
+		"\nnumber of indices: " << num_indices << '\n';
 
 	glBindBuffer(GL_ARRAY_BUFFER, vbo_arr);
 	glBufferData(GL_ARRAY_BUFFER, sizeof_vb, vb(), GL_STATIC_DRAW);

@@ -1,10 +1,10 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <cmath>
-#include <iostream>
 #include <iomanip>
 
 #include "scoped.hpp"
+#include "stream.hpp"
 #include "vectsimd.hpp"
 #include "rendSkeleton.hpp"
 
@@ -330,7 +330,7 @@ loadSkeletonAnimationABE(
 	scoped_ptr< FILE, scoped_functor > file(fopen(filename, "rb"));
 
 	if (0 == file()) {
-		std::cerr << __FUNCTION__ << " failed to open " << filename << std::endl;
+		stream::cerr << __FUNCTION__ << " failed to open " << filename << '\n';
 		return false;
 	}
 
@@ -342,8 +342,8 @@ loadSkeletonAnimationABE(
 	if (1 != fread(&version, sizeof(version), 1, file()))
 		return false;
 
-	std::cout << "skeleton magic, version: 0x" << std::hex << std::setw(8) << std::setfill('0') <<
-		magic << std::dec << ", " << version << std::endl;
+	stream::cout << "skeleton magic, version: 0x" << stream::hex << stream::setw(8) << stream::setfill('0') <<
+		magic << stream::dec << ", " << version << '\n';
 
 	static const uint32_t sMagic = 0x6c656b53;
 	static const uint32_t sVersion = 100;
@@ -356,7 +356,7 @@ loadSkeletonAnimationABE(
 		return false;
 
 	if (*count < n_bones) {
-		std::cerr << __FUNCTION__ << " failed to load a skeleton with too many bones" << std::endl;
+		stream::cerr << __FUNCTION__ << " failed to load a skeleton with too many bones\n";
 		return false;
 	}
 
@@ -405,7 +405,7 @@ loadSkeletonAnimationABE(
 		bone[i].name = name;
 
 #if VERBOSE_READ
-		std::cout <<
+		stream::cout <<
 			"bone " << i << ": " << name <<
 			"\n\tpos: " <<
 			bone[i].position[0] << ", " <<
@@ -421,7 +421,7 @@ loadSkeletonAnimationABE(
 			bone[i].scale[1] << ", " <<
 			bone[i].scale[2] <<
 			"\n\tpar: " <<
-			unsigned(bone[i].parent_idx) << std::endl;
+			unsigned(bone[i].parent_idx) << '\n';
 
 #endif
 	}
@@ -431,7 +431,7 @@ loadSkeletonAnimationABE(
 		return false;
 
 #if VERBOSE_READ
-	std::cout << "animations: " << n_anims << std::endl;
+	stream::cout << "animations: " << n_anims << '\n';
 
 #endif
 	for (uint16_t i = 0; i < n_anims; ++i) {
@@ -451,7 +451,7 @@ loadSkeletonAnimationABE(
 			return false;
 
 		if (0 == duration[1])
-			std::cout << "warning: animation '" << name << "' has zero duration\n";
+			stream::cout << "warning: animation '" << name << "' has zero duration\n";
 
 		const float scaledDuration = (1.f / 512.f) * duration[1];
 		durations.push_back(scaledDuration);
@@ -461,7 +461,7 @@ loadSkeletonAnimationABE(
 			return false;
 
 #if VERBOSE_READ
-		std::cout << "animation, tracks: " << name << ", " << unsigned(n_tracks) << std::endl;
+		stream::cout << "animation, tracks: " << name << ", " << unsigned(n_tracks) << '\n';
 
 #endif
 		std::vector< Track >& skeletal_animation = *animations.insert(animations.end(), std::vector< Track >());
@@ -474,7 +474,7 @@ loadSkeletonAnimationABE(
 			assert(!bone_idx_and_stuff[1]);
 
 #if VERBOSE_READ
-			std::cout << "track, bone: " << unsigned(i) << ", " << unsigned(bone_idx_and_stuff[0]) << std::endl;
+			stream::cout << "track, bone: " << unsigned(i) << ", " << unsigned(bone_idx_and_stuff[0]) << '\n';
 
 #endif
 			Track& track = *skeletal_animation.insert(skeletal_animation.end(), Track());
@@ -486,7 +486,7 @@ loadSkeletonAnimationABE(
 				return false;
 
 #if VERBOSE_READ
-			std::cout << "\tposition keys: " << n_pos_keys << std::endl;
+			stream::cout << "\tposition keys: " << n_pos_keys << '\n';
 
 #endif
 			for (uint32_t i = 0; i < n_pos_keys; ++i) {
@@ -511,7 +511,7 @@ loadSkeletonAnimationABE(
 				return false;
 
 #if VERBOSE_READ
-			std::cout << "\torientation keys: " << n_ori_keys << std::endl;
+			stream::cout << "\torientation keys: " << n_ori_keys << '\n';
 
 #endif
 			for (uint32_t i = 0; i < n_ori_keys; ++i) {
@@ -537,7 +537,7 @@ loadSkeletonAnimationABE(
 				return false;
 
 #if VERBOSE_READ
-			std::cout << "\tscale keys: " << n_sca_keys << std::endl;
+			stream::cout << "\tscale keys: " << n_sca_keys << '\n';
 
 #endif
 			for (uint32_t i = 0; i < n_sca_keys; ++i) {
@@ -843,11 +843,11 @@ static bool loadTrackOgre(
 	track.scale_last_key_idx = 0;
 
 #if VERBOSE_READ
-	std::cout << "track, bone: " << unsigned(tracks.size() - 1) << ", " << unsigned(bone_idx) << std::endl;
+	stream::cout << "track, bone: " << unsigned(tracks.size() - 1) << ", " << unsigned(bone_idx) << '\n';
 	const Track& t = tracks.back();
-	std::cout << "\tposition keys: " << t.position_key.size() << std::endl;
-	std::cout << "\torientation keys: " << t.orientation_key.size() << std::endl;
-	std::cout << "\tscale keys: " << t.scale_key.size() << std::endl;
+	stream::cout << "\tposition keys: " << t.position_key.size() << '\n';
+	stream::cout << "\torientation keys: " << t.orientation_key.size() << '\n';
+	stream::cout << "\tscale keys: " << t.scale_key.size() << '\n';
 
 #endif
 	return true;
@@ -1069,7 +1069,7 @@ loadSkeletonAnimationOgre(
 	for (unsigned i = 0; i < boneCount; ++i) {
 
 #if VERBOSE_READ
-		std::cout <<
+		stream::cout <<
 			"bone " << i << ": " << bone[i].name <<
 			"\n\tpos: " <<
 			bone[i].position[0] << ", " <<
@@ -1085,7 +1085,7 @@ loadSkeletonAnimationOgre(
 			bone[i].scale[1] << ", " <<
 			bone[i].scale[2] <<
 			"\n\tpar: " <<
-			unsigned(bone[i].parent_idx) << std::endl;
+			unsigned(bone[i].parent_idx) << '\n';
 
 #endif
 		initBoneMatx(boneCount, bone_mat, bone, i);

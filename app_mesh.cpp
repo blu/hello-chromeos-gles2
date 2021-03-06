@@ -345,6 +345,7 @@ hook::init_resources(
 	/////////////////////////////////////////////////////////////////
 
 	glEnable(GL_CULL_FACE);
+	glEnable(GL_DEPTH_TEST);
 
 	const GLclampf red = 0.f;
 	const GLclampf green = 0.f;
@@ -593,8 +594,6 @@ hook::render_frame(GLuint /* primary_fbo */)
 			mvp[3][0] * aspect, mvp[3][1], mvp[3][2], mvp[3][3]);
 
 	/////////////////////////////////////////////////////////////////
-
-	glEnable(GL_DEPTH_TEST);
 
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
