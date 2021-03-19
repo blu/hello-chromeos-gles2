@@ -839,10 +839,10 @@ bool EGL::initGLES2(
 
 	scoped_ptr< EGL, scoped_functor > deinit_self(this);
 
-	drm_fd = open("/dev/dri/vgem", O_RDWR | O_CLOEXEC);
+	drm_fd = open("/dev/dri/card0", O_RDWR | O_CLOEXEC);
 
 	if (drm_fd < 0) {
-		stream::cerr << "could not open /dev/dri/vgem: " << strerror(errno) << '\n';
+		stream::cerr << "could not open /dev/dri/card0: " << strerror(errno) << '\n';
 		return false;
 	}
 
