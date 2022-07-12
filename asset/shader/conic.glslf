@@ -51,17 +51,18 @@ float intersect(vec3 ro, vec3 rd, vec3 pa, vec3 pb, float r)
 		float y = baoa + t*bard;
 
 		// body
-		if ( y > 0.0 && y < baba)
+		if (y > 0.0 && y < baba)
 			return t;
 
-		// caps
-		vec3 oc = (y <= 0.0) ? oa : ro - pb;
-		b = dot(rd,oc);
-		c = dot(oc,oc) - r*r;
-		h = b*b - c;
+		// lower cap
+		if (y <= 0.0) {
+			b = dot(rd,oa);
+			c = dot(oa,oa) - r*r;
+			h = b*b - c;
 
-		if (h > 0.0)
-			return -b - sqrt(h);
+			if (h > 0.0)
+				return -b - sqrt(h);
+		}
 	}
 
 	return -1.0;
