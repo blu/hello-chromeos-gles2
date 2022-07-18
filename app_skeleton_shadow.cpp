@@ -487,9 +487,9 @@ hook::init_resources(
 
 	glEnable(GL_CULL_FACE);
 
-	const GLclampf red = 0.f;
-	const GLclampf green = 0.f;
-	const GLclampf blue = 0.f;
+	const GLclampf red = .25f;
+	const GLclampf green = .25f;
+	const GLclampf blue = .25f;
 	const GLclampf alpha = 0.f;
 
 	glClearColor(red, green, blue, alpha);
