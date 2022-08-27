@@ -585,7 +585,7 @@ public:
 	}
 
 	out& operator <<(const char* const a) {
-		if (0 != file)
+		if (0 != file && a)
 			fputs(a, file);
 
 		return *this;
