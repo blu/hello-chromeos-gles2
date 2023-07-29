@@ -98,7 +98,7 @@ function cxx_uarch_arm() {
 			CXXFLAGS+=(
 				-march=armv7-a
 				-mtune=cortex-a8
-				-DCACHELINE_SIZE=32
+				-DCACHELINE_SIZE=64
 			)
 		elif [ `echo $UARCH | grep -c 0xc07` -ne 0 ]; then # cortex-a7
 			CXXFLAGS+=(
@@ -111,6 +111,20 @@ function cxx_uarch_arm() {
 			# set compiler flags to something sane
 			CXXFLAGS+=(
 				-DCACHELINE_SIZE=64
+			)
+		fi
+	elif [[ $VENDOR == 0x46 ]]; then # Fujitsu
+		if   [ `echo $UARCH | grep -c 0x001` -ne 0 ]; then # a64fx
+			CXXFLAGS+=(
+				-march=armv8.2-a+sve
+				-mcpu=a64fx
+				-DCACHELINE_SIZE=128
+			)
+		else
+			echo WARNING: unsupported uarch $UARCH by vendor $VENDOR
+			# set compiler flags to something sane
+			CXXFLAGS+=(
+				-DCACHELINE_SIZE=128
 			)
 		fi
 	elif [[ $VENDOR == 0x51 ]]; then # Qualcomm
