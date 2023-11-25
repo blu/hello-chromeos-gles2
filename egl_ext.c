@@ -17,15 +17,15 @@ PFNEGLGETSYNCATTRIBKHRPROC  eglGetSyncAttribKHR;
 #endif /* EGL_KHR_fence_sync */
 void init_egl_ext(void) {
 #if EGL_KHR_image
-	eglCreateImageKHR  = eglGetProcAddress("eglCreateImageKHR");
-	eglDestroyImageKHR = eglGetProcAddress("eglDestroyImageKHR");
+	eglCreateImageKHR  = (PFNEGLCREATEIMAGEKHRPROC)  eglGetProcAddress("eglCreateImageKHR");
+	eglDestroyImageKHR = (PFNEGLDESTROYIMAGEKHRPROC) eglGetProcAddress("eglDestroyImageKHR");
 
 #endif /* EGL_KHR_image */
 #if EGL_KHR_fence_sync
-	eglCreateSyncKHR     = eglGetProcAddress("eglCreateSyncKHR");
-	eglDestroySyncKHR    = eglGetProcAddress("eglDestroySyncKHR");
-	eglClientWaitSyncKHR = eglGetProcAddress("eglClientWaitSyncKHR");
-	eglGetSyncAttribKHR  = eglGetProcAddress("eglGetSyncAttribKHR");
+	eglCreateSyncKHR     = (PFNEGLCREATESYNCKHRPROC)     eglGetProcAddress("eglCreateSyncKHR");
+	eglDestroySyncKHR    = (PFNEGLDESTROYSYNCKHRPROC)    eglGetProcAddress("eglDestroySyncKHR");
+	eglClientWaitSyncKHR = (PFNEGLCLIENTWAITSYNCKHRPROC) eglGetProcAddress("eglClientWaitSyncKHR");
+	eglGetSyncAttribKHR  = (PFNEGLGETSYNCATTRIBKHRPROC)  eglGetProcAddress("eglGetSyncAttribKHR");
 
 #endif /* EGL_KHR_fence_sync */
 }

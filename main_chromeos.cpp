@@ -76,6 +76,7 @@ const char arg_screen[]        = "screen";
 const char arg_bitness[]       = "bitness";
 const char arg_fsaa[]          = "fsaa";
 const char arg_drawcalls[]     = "drawcalls";
+const char arg_device[]        = "device";
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // wayland interfaces
@@ -172,6 +173,7 @@ struct EGL {
 	}
 
 	bool initGLES2(
+		const unsigned device_idx,
 		const unsigned fsaa,
 		const unsigned (& bitness)[4]);
 
@@ -615,12 +617,10 @@ void redraw(void *data, wl_callback *callback, uint32_t time)
 	int32_t frame_error = egl->frame_error;
 	uint32_t frame_count = egl->frame_count;
 
-#if QUIRK0001_SYSTEM_CRASH_AT_EXIT == 0
 	// don't draw if an error has occurred
 	if (frame_error)
 		return;
 
-#endif
 	const size_t curr_buffer_idx = frame_count & 1;
 	const size_t next_buffer_idx = ++frame_count & 1;
 	egl->frame_count = frame_count;
@@ -630,11 +630,6 @@ void redraw(void *data, wl_callback *callback, uint32_t time)
 	const uint32_t window_w = egl->window_w;
 	const uint32_t window_h = egl->window_h;
 
-#if QUIRK0001_SYSTEM_CRASH_AT_EXIT
-	// skip rendering if an error has occurred, but keep flipping the buffers indefinitely
-	if (!frame_error) {
-
-#endif
 	// emit app's next frame into the buffer that was just presented
 	egl->activate_framebuffer(curr_buffer_idx);
 
@@ -643,10 +638,6 @@ void redraw(void *data, wl_callback *callback, uint32_t time)
 		return;
 	}
 
-#if QUIRK0001_SYSTEM_CRASH_AT_EXIT
-	}
-
-#endif
 #if 0
 	// create a fence sync for next frame
 	if (egl->create_fence_sync(curr_buffer_idx)) {
@@ -802,6 +793,7 @@ static int create_drm_dmabuf(
 }
 
 bool EGL::initGLES2(
+	const unsigned device_idx,
 	const unsigned fsaa,
 	const unsigned (& bitness)[4])
 {
@@ -839,10 +831,13 @@ bool EGL::initGLES2(
 
 	scoped_ptr< EGL, scoped_functor > deinit_self(this);
 
-	drm_fd = open("/dev/dri/card0", O_RDWR | O_CLOEXEC);
+	char device_path[32];
+	sprintf(device_path, "/dev/dri/card%u", device_idx);
+
+	drm_fd = open(device_path, O_RDWR | O_CLOEXEC);
 
 	if (drm_fd < 0) {
-		stream::cerr << "could not open /dev/dri/card0: " << strerror(errno) << '\n';
+		stream::cerr << "could not open " << device_path << ": " << strerror(errno) << '\n';
 		return false;
 	}
 
@@ -1224,6 +1219,7 @@ struct Param {
 	enum {
 		FLAG_PRINT_PERF_COUNTERS = 1
 	};
+	unsigned device_idx;    // device index in /dev/dri/cardN sequence
 	unsigned flags;         // combination of flags
 	unsigned image_w;       // frame width
 	unsigned image_h;       // frame height
@@ -1297,6 +1293,14 @@ parse_cli(const int argc, char** const argv, struct Param& param)
 			continue;
 		}
 
+		if (i + 1 < argc && !strcmp(argv[i] + prefix_len, arg_device)) {
+			if (1 != sscanf(argv[i + 1], "%u", &param.device_idx))
+				cli_err = true;
+
+			i += 1;
+			continue;
+		}
+
 		cli_err = true;
 	}
 
@@ -1313,8 +1317,10 @@ parse_cli(const int argc, char** const argv, struct Param& param)
 			" <positive_integer>\t\t: set fullscreen antialiasing; default is none\n"
 			"\t" << util::arg_prefix << arg_drawcalls <<
 			" <positive_integer>\t\t: set number of drawcalls per frame; may be ignored by apps\n"
+			"\t" << util::arg_prefix << arg_device <<
+			" <unsigned_integer>\t\t: device index in /dev/dri/cardN sequence\n" <<
 			"\t" << util::arg_prefix << util::arg_app <<
-			" <option> [<arguments>]\t\t: app-specific option" << '\n';
+			" <option> [<arguments>]\t\t: app-specific option\n";
 
 		return 1;
 	}
@@ -1335,6 +1341,7 @@ int main(
 	stream::cerr.open(stderr);
 
 	Param param;
+	param.device_idx = 0;
 	param.flags = 0;
 	param.image_w = 512;
 	param.image_h = 512;
@@ -1349,6 +1356,7 @@ int main(
 	if (parse_cli(argc, argv, param))
 		return EXIT_FAILURE;
 
+	const unsigned device_idx      = param.device_idx;
 	const unsigned image_w         = param.image_w;
 	const unsigned image_h         = param.image_h;
 	const unsigned (& bitness)[4]  = param.bitness;
@@ -1362,7 +1370,7 @@ int main(
 	// set up GLES
 	EGL egl(image_w, image_h);
 
-	if (!egl.initGLES2(fsaa, bitness)) {
+	if (!egl.initGLES2(device_idx, fsaa, bitness)) {
 		stream::cerr << "Error initializing GLES\n";
 		return EXIT_FAILURE;
 	}
@@ -1434,11 +1442,6 @@ int main(
 			"\naverage FPS: " << (double(egl.frame_count) / sec) << '\n';
 	}
 
-#if QUIRK0001_SYSTEM_CRASH_AT_EXIT
-	// keep the dispatch loop going indefinitely to avoid system crash on RK3399 (ticket #4)
-	while (wl_display_dispatch(display) != -1) {}
-
-#endif
 	// clean up wayland
 	for (size_t i = 0; i < countof(egl.buffer); ++i) {
 		wl_buffer_destroy(egl.buffer[i]);

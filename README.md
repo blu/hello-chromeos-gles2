@@ -17,9 +17,8 @@ Prerequisites
 The following Chromebrew packages are required:
 
 * buildessential (a meta package that may or may not include some or all of the follwing packages at the time of reading)
-* gcc7
-* llvm (optional up to R67, required from R68 onwards due to a limitation in the GNU linker from binutils package; see [Chromebrew ticket #2563](https://github.com/skycocker/chromebrew/issues/2563))
-* libwayland
+* gcc10
+* wayland
 * wayland_protocols
 * linuxheaders
 
@@ -27,28 +26,15 @@ The following Chromebrew packages are required:
 How to Build
 ------------
 
-Before you can build any of the applications you have to run `build_wayland_protocols.sh` in the source directory in order to generate the code for the required auxiliary wayland protocols. It might be useful to repeat that step after every update of Chromebrew package `wayland_protocols`.
+Before you can build any of the applications you have to run `build_wayland_protocols.sh` in the source directory in order to generate the code for the required auxiliary wayland protocols. It is recommended to repeat that step after every update of Chromebrew package `wayland_protocols`.
 
-Running one of the `build_chromeos_xxx.sh` scripts in the source directiory builds the respective `test_egl_xxx` executable. Currently the compiler is hard-coded to clang++ and the linker to lld, so that building is R68-ready out of the box. To use the GNU linker and g++, comment out `-fuse-ld` flag from `LFLAGS`:
-
-```
-LFLAGS=(
-#	-fuse-ld=lld
-	-lwayland-client
-	-lrt
-	-ldl
-	-lEGL
-	-lGLESv2
-)
-
-```
-And change the compiler found in the `BUILD_CMD` variable to g++.
+Running one of the `build_chromeos_xxx.sh` scripts in the source directiory builds the respective `test_egl_xxx` executable. Currently the compiler is hard-coded to gcc/g++.
 
 
-Warnings & Tips
+Tips
 ---------------
 
-Please, take a moment to check the CLI options -- you will need them!
+All test apps follow a common CLI scheme of universal args and app-specific args:
 ```
 usage: ./test_egl_sphere [<option> ...]
 options:
@@ -57,26 +43,29 @@ options:
         -bitness <r> <g> <b> <a>                : set framebuffer RGBA bitness; default is screen's bitness
         -fsaa <positive_integer>                : set fullscreen antialiasing; default is none
         -drawcalls <positive_integer>           : set number of drawcalls per frame; may be ignored by apps
+        -device <unsigned_integer>              : device index in /dev/dri/cardN sequence
         -app <option> [<arguments>]             : app-specific option
 ```
 
 Example of CLI usage:
 ```
-$ EGL_LOG_LEVEL=warning ./test_egl_xxx -frames 2000 -bitness 8 8 8 8 -screen 640 640 60 -app albedo_map asset/texture/unperturbed_normal.raw 16 16 -app alt_anim
+$ LD_LIBRARY_PATH=/usr/lib:/usr/local/lib XDG_RUNTIME_DIR=/run/chrome EGL_LOG_LEVEL=warning ./test_egl_xxx -frames 2000 -bitness 8 8 8 8 -screen 640 640 60
 ```
 
 The above:
 
-* Sets the EGL diagnostics envvar to 'warnings-only'.
+* Makes sure factory-supplied libraries are preferred over chromebrew-supplied ones (via 'LD_LIBRARY_PATH' envvar).
+* Tells libwayland-client where to find wayland sockets (via 'XDG_RUNTIME_DIR' envvar).
+* Sets the libEGL diagnostics to 'warnings-only' (via 'EGL_LOG_LEVEL' envvar).
 * Specifies 2000 frames worth of runtime.
 * Specifies framebuffer pixel format of RGBA8888 (others supported are RGBA8880 and RGBA5650).
 * Specifies framebuffer geometry of 640x640x60Hz (refresh is required yet conveniently ignored).
-* Passes two app-specific options via the `-app` arguments.
 
-Please, note that:
+Notes:
 
-* Resizing at runtime, including switching to fullscreen, is not implemented yet.
-* If you need to see libEGL diagnostics/debug messages, set the `EGL_LOG_LEVEL` envvar to `debug`.
+* You may need superuser privileges to use the export-buffer DRI functionality, used for on-screen presentation of our framebuffer.
+* On platforms with multiple /dev/dri/cardN devices, some of those may deny creation of 'dumb' DRM buffers, which makes such devices useless to us.
+* Resizing at runtime, including switching to fullscreen, is not supported.
 
 References
 ----------
@@ -85,5 +74,3 @@ References
 * Henrique Dante de Almeida [The Hello Wayland Tutorial](https://hdante.wordpress.com/2014/07/08/the-hello-wayland-tutorial/)
 
 ![](asset/screenshot2.png)
-
-Cherish your pixels!
