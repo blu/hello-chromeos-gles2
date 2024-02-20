@@ -32,7 +32,7 @@ using util::scoped_ptr;
 using util::scoped_functor;
 using util::deinit_resources_t;
 
-namespace sk {
+namespace { // anonymous
 
 #define SETUP_VERTEX_ATTR_POINTERS_MASK	( \
 		SETUP_VERTEX_ATTR_POINTERS_MASK_vertex)
@@ -44,11 +44,11 @@ struct Vertex {
 	GLfloat pos[3];
 };
 
-} // namespace sk
+} // namespace
 
 namespace { // anonymous
 
-const char arg_prefix[]    = "-";
+const char arg_prefix[]    = "--";
 const char arg_app[]       = "app";
 
 const char arg_anim_step[] = "anim_step";
@@ -66,13 +66,6 @@ EGLDisplay g_display = EGL_NO_DISPLAY;
 EGLContext g_context = EGL_NO_CONTEXT;
 
 #endif
-enum {
-	TEX__DUMMY, // avoid zero-sized declarations
-
-	TEX_COUNT,
-	TEX_FORCE_UINT = -1U
-};
-
 enum {
 	PROG_SKIN,
 
@@ -110,7 +103,6 @@ GLint g_uni[PROG_COUNT][UNI_COUNT];
 GLuint g_vao[PROG_COUNT];
 
 #endif
-GLuint g_tex[TEX_COUNT];
 GLuint g_vbo[VBO_COUNT];
 GLuint g_shader_vert[PROG_COUNT];
 GLuint g_shader_frag[PROG_COUNT];
@@ -123,100 +115,67 @@ rend::ActiveAttrSemantics g_active_attr_semantics[PROG_COUNT];
 
 } // namespace
 
-bool hook::set_num_drawcalls(
+namespace hook {
+
+bool set_num_drawcalls(
 	const unsigned)
 {
 	return false;
 }
 
-unsigned hook::get_num_drawcalls()
+unsigned get_num_drawcalls()
 {
 	return 1;
 }
 
-bool hook::requires_depth()
+bool requires_depth()
 {
 	return true;
 }
 
-static bool parse_cli(
+int parse_cli(
 	const unsigned argc,
 	const char* const* argv)
 {
-	bool cli_err = false;
-	const unsigned prefix_len = strlen(arg_prefix);
+	unsigned i = 0;
 
-	for (unsigned i = 1; i < argc && !cli_err; ++i) {
-		if (strncmp(argv[i], arg_prefix, prefix_len) ||
-			strcmp(argv[i] + prefix_len, arg_app)) {
-			continue;
+	if (i + 1 < argc && !strcmp(argv[i], arg_mesh)) {
+		g_mesh_filename = argv[i + 1];
+		return 1;
+	}
+	else
+	if (i + 1 < argc && !strcmp(argv[i], arg_anim_step)) {
+		if (1 == sscanf(argv[i + 1], "%f", &g_angle_step) && 0.f < g_angle_step) {
+			return 1;
 		}
-
-		if (++i < argc) {
-			if (i + 1 < argc && !strcmp(argv[i], arg_mesh)) {
-				g_mesh_filename = argv[i + 1];
-				i += 1;
-				continue;
-			}
-			else
-			if (i + 1 < argc && !strcmp(argv[i], arg_anim_step)) {
-				if (1 == sscanf(argv[i + 1], "%f", &g_angle_step) && 0.f < g_angle_step) {
-					i += 1;
-					continue;
-				}
-			}
-			else
-			if (i + 3 < argc && !strcmp(argv[i], arg_rot_axes)) {
-				unsigned axis[3];
-				if (1 == sscanf(argv[i + 1], "%u", axis + 0) &&
-				    1 == sscanf(argv[i + 2], "%u", axis + 1) &&
-				    1 == sscanf(argv[i + 3], "%u", axis + 2)) {
-					g_rot_axis[0] = axis[0] ? 1.f : 0.f;
-					g_rot_axis[1] = axis[1] ? 1.f : 0.f;
-					g_rot_axis[2] = axis[2] ? 1.f : 0.f;
-					i += 3;
-					continue;
-				}
-			}
+	}
+	else
+	if (i + 3 < argc && !strcmp(argv[i], arg_rot_axes)) {
+		unsigned axis[3];
+		if (1 == sscanf(argv[i + 1], "%u", axis + 0) &&
+		    1 == sscanf(argv[i + 2], "%u", axis + 1) &&
+		    1 == sscanf(argv[i + 3], "%u", axis + 2)) {
+			g_rot_axis[0] = axis[0] ? 1.f : 0.f;
+			g_rot_axis[1] = axis[1] ? 1.f : 0.f;
+			g_rot_axis[2] = axis[2] ? 1.f : 0.f;
+			return 3;
 		}
-
-		cli_err = true;
 	}
 
-	if (cli_err) {
-		stream::cerr << "app options:\n"
-			"\t" << arg_prefix << arg_app << " " << arg_mesh <<
-			" <filename>\t\t\t\t: use specified mesh file of coordinates and indices\n"
-			"\t" << arg_prefix << arg_app << " " << arg_anim_step <<
-			" <step>\t\t\t\t: use specified animation step; entire animation is 1.0\n"
-			"\t" << arg_prefix << arg_app << " " << arg_rot_axes <<
-			" <int> <int> <int>\t\t\t: rotate mesh around the specified mask for x, y and z axes; default is 1 1 1 -- all axes\n\n";
-	}
+	stream::cerr << "app options:\n"
+		"\t" << arg_prefix << arg_app << " " << arg_mesh <<
+		" <filename>\t\t\t\t: use specified mesh file of coordinates and indices\n"
+		"\t" << arg_prefix << arg_app << " " << arg_anim_step <<
+		" <step>\t\t\t\t: use specified animation step; entire animation is 1.0\n"
+		"\t" << arg_prefix << arg_app << " " << arg_rot_axes <<
+		" <int> <int> <int>\t\t\t: rotate mesh around the specified mask for x, y and z axes; default is 1 1 1 -- all axes\n\n";
 
-	return !cli_err;
+	return -1;
 }
+
+} // namespace
 
 namespace { // anonymous
-
-template < unsigned PROG_T >
-inline bool
-bindVertexBuffersAndPointers()
-{
-	assert(false);
-	return false;
-}
-
-template <>
-inline bool
-bindVertexBuffersAndPointers< PROG_SKIN >()
-{
-	glBindBuffer(GL_ARRAY_BUFFER, g_vbo[VBO_SKIN_VTX]);
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, g_vbo[VBO_SKIN_IDX]);
-
-	DEBUG_GL_ERR()
-
-	return sk::setupVertexAttrPointers< sk::Vertex >(g_active_attr_semantics[PROG_SKIN]);
-}
 
 bool check_context(
 	const char* prefix)
@@ -226,13 +185,11 @@ bool check_context(
 #if PLATFORM_EGL
 	if (g_display != eglGetCurrentDisplay()) {
 		stream::cerr << prefix << " encountered foreign display\n";
-
 		context_correct = false;
 	}
 
 	if (g_context != eglGetCurrentContext()) {
 		stream::cerr << prefix << " encountered foreign context\n";
-
 		context_correct = false;
 	}
 
@@ -262,9 +219,6 @@ hook::deinit_resources()
 		glDeleteShader(g_shader_frag[i]);
 		g_shader_frag[i] = 0;
 	}
-
-	glDeleteTextures(sizeof(g_tex) / sizeof(g_tex[0]), g_tex);
-	memset(g_tex, 0, sizeof(g_tex));
 
 #if PLATFORM_GL_OES_vertex_array_object
 	glDeleteVertexArraysOES(sizeof(g_vao) / sizeof(g_vao[0]), g_vao);
@@ -305,9 +259,6 @@ hook::init_resources(
 	const unsigned argc,
 	const char* const * argv)
 {
-	if (!parse_cli(argc, argv))
-		return false;
-
 #if DEBUG && PLATFORM_GL_KHR_debug
 	glDebugMessageCallbackKHR(debugProc, NULL);
 	glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS_KHR);
@@ -354,13 +305,6 @@ hook::init_resources(
 
 	glClearColor(red, green, blue, alpha);
 	glClearDepthf(1.f);
-
-	/////////////////////////////////////////////////////////////////
-
-	glGenTextures(sizeof(g_tex) / sizeof(g_tex[0]), g_tex);
-
-	for (unsigned i = 0; i < sizeof(g_tex) / sizeof(g_tex[0]); ++i)
-		assert(g_tex[i]);
 
 	/////////////////////////////////////////////////////////////////
 
@@ -457,11 +401,16 @@ hook::init_resources(
 #if PLATFORM_GL_OES_vertex_array_object
 	glBindVertexArrayOES(g_vao[PROG_SKIN]);
 
-	if (!bindVertexBuffersAndPointers< PROG_SKIN >() || (DEBUG_LITERAL && util::reportGLError())) {
-		stream::cerr << __FUNCTION__ << "failed at bindVertexBuffersAndPointers for PROG_SKIN\n";
+#endif
+	glBindBuffer(GL_ARRAY_BUFFER, g_vbo[VBO_SKIN_VTX]);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, g_vbo[VBO_SKIN_IDX]);
+
+	if (!setupVertexAttrPointers< Vertex >(g_active_attr_semantics[PROG_SKIN])) {
+		stream::cerr << __FUNCTION__ << "failed at setupVertexAttrPointers\n";
 		return false;
 	}
 
+#if PLATFORM_GL_OES_vertex_array_object
 	for (unsigned i = 0; i < g_active_attr_semantics[PROG_SKIN].num_active_attr; ++i)
 		glEnableVertexAttribArray(g_active_attr_semantics[PROG_SKIN].active_attr[i]);
 
@@ -469,11 +418,10 @@ hook::init_resources(
 
 	glBindVertexArrayOES(0);
 
-#endif // PLATFORM_GL_OES_vertex_array_object
+#endif
 	on_error.reset();
 	return true;
 }
-
 
 namespace { // anonymous
 
@@ -640,8 +588,8 @@ hook::render_frame(GLuint /* primary_fbo */)
 	DEBUG_GL_ERR()
 
 #else
-	if (!bindVertexBuffersAndPointers< PROG_SKIN >())
-		return false;
+	glBindBuffer(GL_ARRAY_BUFFER, g_vbo[VBO_SKIN_VTX]);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, g_vbo[VBO_SKIN_IDX]);
 
 	for (unsigned i = 0; i < g_active_attr_semantics[PROG_SKIN].num_active_attr; ++i)
 		glEnableVertexAttribArray(g_active_attr_semantics[PROG_SKIN].active_attr[i]);

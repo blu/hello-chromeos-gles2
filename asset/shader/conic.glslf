@@ -96,5 +96,5 @@ void main() {
 		}
 	}
 
-	xx_FragColor = vec4((n * 0.5 + 0.5) * (2.f - tmin) / 2.f, tmin == 42.f ? 0.0 : 1.0);
+	xx_FragColor = vec4((n * 0.5 + 0.5) * (2.0 - tmin) / 2.0, tmin == 42.0 ? 0.0 : 1.0);
 }

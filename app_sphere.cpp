@@ -46,7 +46,7 @@ struct Vertex {
 	GLfloat txc[2];
 };
 
-const char arg_prefix[]    = "-";
+const char arg_prefix[]    = "--";
 const char arg_app[]       = "app";
 
 const char arg_normal[]    = "normal_map";
@@ -63,7 +63,7 @@ struct TexDesc {
 TexDesc g_normal = { "asset/texture/slate_normal.raw", 1024, 1024 };
 TexDesc g_albedo = { "asset/texture/slate_albedo.raw", 1024, 1024 };
 
-float g_tile = 2.f;
+float g_tile = 1.f;
 float g_angle = 0.f;
 float g_angle_step = .0125f;
 
@@ -150,86 +150,90 @@ bool requires_depth()
 	return false;
 }
 
+int parse_cli(
+    const unsigned argc,
+    const char* const* argv)
+{
+	unsigned i = 0;
+
+	if (i + 3 < argc && !strcmp(argv[i], arg_normal)) {
+		if (1 == sscanf(argv[i + 2], "%u", &g_normal.w) &&
+			1 == sscanf(argv[i + 3], "%u", &g_normal.h)) {
+
+			g_normal.filename = argv[i + 1];
+			return 3;
+		}
+	}
+	else
+	if (i + 3 < argc && !strcmp(argv[i], arg_albedo)) {
+		if (1 == sscanf(argv[i + 2], "%u", &g_albedo.w) &&
+			1 == sscanf(argv[i + 3], "%u", &g_albedo.h)) {
+
+			g_albedo.filename = argv[i + 1];
+			return 3;
+		}
+	}
+	else
+	if (i + 1 < argc && !strcmp(argv[i], arg_tile)) {
+		if (1 == sscanf(argv[i + 1], "%f", &g_tile) && 0.f < g_tile) {
+			return 1;
+		}
+	}
+	else
+	if (i + 1 < argc && !strcmp(argv[i], arg_anim_step)) {
+		if (1 == sscanf(argv[i + 1], "%f", &g_angle_step) && 0.f < g_angle_step) {
+			return 1;
+		}
+	}
+
+	stream::cerr << "app options:\n"
+		"\t" << arg_prefix << arg_app << " " << arg_normal <<
+		" <filename> <width> <height>\t: use specified raw file and dimensions as source of normal map\n"
+		"\t" << arg_prefix << arg_app << " " << arg_albedo <<
+		" <filename> <width> <height>\t: use specified raw file and dimensions as source of albedo map\n"
+		"\t" << arg_prefix << arg_app << " " << arg_tile <<
+		" <n>\t\t\t\t\t: tile texture maps the specified number of times along U, half as much along V\n"
+		"\t" << arg_prefix << arg_app << " " << arg_anim_step <<
+		" <step>\t\t\t\t: use specified rotation step\n\n";
+
+	return -1;
+}
+
 } // namespace
 
 namespace { // anonymous
 
-bool parse_cli(
-    const unsigned argc,
-    const char* const* argv)
-{
-	bool cli_err = false;
-	const unsigned prefix_len = strlen(arg_prefix);
-
-	for (unsigned i = 1; i < argc && !cli_err; ++i) {
-		if (strncmp(argv[i], arg_prefix, prefix_len) ||
-			strcmp(argv[i] + prefix_len, arg_app)) {
-			continue;
-		}
-
-		if (++i < argc) {
-			if (i + 3 < argc && !strcmp(argv[i], arg_normal)) {
-				if (1 == sscanf(argv[i + 2], "%u", &g_normal.w) &&
-					1 == sscanf(argv[i + 3], "%u", &g_normal.h)) {
-
-					g_normal.filename = argv[i + 1];
-					i += 3;
-					continue;
-				}
-			}
-			else
-			if (i + 3 < argc && !strcmp(argv[i], arg_albedo)) {
-				if (1 == sscanf(argv[i + 2], "%u", &g_albedo.w) &&
-					1 == sscanf(argv[i + 3], "%u", &g_albedo.h)) {
-
-					g_albedo.filename = argv[i + 1];
-					i += 3;
-					continue;
-				}
-			}
-			else
-			if (i + 1 < argc && !strcmp(argv[i], arg_tile)) {
-				if (1 == sscanf(argv[i + 1], "%f", &g_tile) && 0.f < g_tile) {
-					i += 1;
-					continue;
-				}
-			}
-			else
-			if (i + 1 < argc && !strcmp(argv[i], arg_anim_step)) {
-				if (1 == sscanf(argv[i + 1], "%f", &g_angle_step) && 0.f < g_angle_step) {
-					i += 1;
-					continue;
-				}
-			}
-		}
-
-		cli_err = true;
-	}
-
-	if (cli_err) {
-		stream::cerr << "app options:\n"
-			"\t" << arg_prefix << arg_app << " " << arg_normal <<
-			" <filename> <width> <height>\t: use specified raw file and dimensions as source of normal map\n"
-			"\t" << arg_prefix << arg_app << " " << arg_albedo <<
-			" <filename> <width> <height>\t: use specified raw file and dimensions as source of albedo map\n"
-			"\t" << arg_prefix << arg_app << " " << arg_tile <<
-			" <n>\t\t\t\t\t: tile texture maps the specified number of times along U, half as much along V\n"
-			"\t" << arg_prefix << arg_app << " " << arg_anim_step <<
-			" <step>\t\t\t\t: use specified rotation step\n\n";
-	}
-
-	return cli_err;
-}
-
 template < typename T >
-class generic_free
+class unmap_vtx_buffer
 {
 public:
-	void operator()(T* arg)
-	{
-		free(arg);
+	void operator()(T* arg) {
+		if (arg) {
+			glUnmapBufferOES(GL_ARRAY_BUFFER);
+			glBindBuffer(GL_ARRAY_BUFFER, 0);
+		}
 	}
 };
+
+template < typename T >
+class unmap_idx_buffer
+{
+public:
+	void operator()(T* arg) {
+		if (arg) {
+			glUnmapBufferOES(GL_ELEMENT_ARRAY_BUFFER);
+			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+		}
+	}
+};
+
+bool createIndexedPolarSphere(
+	const GLuint vbo_arr,
+	const GLuint vbo_idx,
+	unsigned& num_faces,
+	const int aspect_u_over_v,
+	const int rows = 33,
+	const int cols = 65) __attribute__ ((noinline));
 
 // bend a polar sphere from a grid of the specified dimensions
 bool createIndexedPolarSphere(
@@ -237,8 +241,8 @@ bool createIndexedPolarSphere(
 	const GLuint vbo_idx,
 	unsigned& num_faces,
 	const int aspect_u_over_v,
-	const int rows = 33,
-	const int cols = 65)
+	const int rows,
+	const int cols)
 {
 	assert(vbo_arr && vbo_idx);
 
@@ -252,8 +256,16 @@ bool createIndexedPolarSphere(
 	const size_t num_tris = ((rows - 3) * 2 + 2) * (cols - 1);
 	num_faces = num_tris;
 
-	scoped_ptr< Vertex, generic_free > arr(
-		reinterpret_cast< Vertex* >(malloc(sizeof(Vertex) * num_verts)));
+	glBindBuffer(GL_ARRAY_BUFFER, vbo_arr);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(Vertex) * num_verts, nullptr, GL_STATIC_DRAW);
+
+	if (util::reportGLError()) {
+		stream::cerr << __FUNCTION__ << " failed at glBindBuffer/glBufferData for ARRAY_BUFFER\n";
+		return false;
+	}
+
+	scoped_ptr< Vertex, unmap_vtx_buffer > arr(
+		reinterpret_cast< Vertex* >(glMapBufferOES(GL_ARRAY_BUFFER, GL_WRITE_ONLY_OES)));
 	unsigned ai = 0;
 
 	// north pole
@@ -337,8 +349,16 @@ bool createIndexedPolarSphere(
 
 	assert(ai == num_verts);
 
-	scoped_ptr< Index[3], generic_free > idx(
-		reinterpret_cast< Index(*)[3] >(malloc(sizeof(Index[3]) * num_tris)));
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vbo_idx);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(Index[3]) * num_tris, nullptr, GL_STATIC_DRAW);
+
+	if (util::reportGLError()) {
+		stream::cerr << __FUNCTION__ << " failed at glBindBuffer/glBufferData for ELEMENT_ARRAY_BUFFER\n";
+		return false;
+	}
+
+	scoped_ptr< Index[3], unmap_idx_buffer > idx(
+		reinterpret_cast< Index(*)[3] >(glMapBufferOES(GL_ELEMENT_ARRAY_BUFFER, GL_WRITE_ONLY_OES)));
 	unsigned ii = 0;
 
 	// north pole
@@ -377,26 +397,6 @@ bool createIndexedPolarSphere(
 
 	assert(ii == num_tris);
 	stream::cout << "number of vertices: " << num_verts << "\nnumber of faces: " << num_tris << '\n';
-
-	glBindBuffer(GL_ARRAY_BUFFER, vbo_arr);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(*arr()) * num_verts, arr(), GL_STATIC_DRAW);
-	glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-	if (util::reportGLError()) {
-		stream::cerr << __FUNCTION__ <<
-			" failed at glBindBuffer/glBufferData for ARRAY_BUFFER\n";
-		return false;
-	}
-
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vbo_idx);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(*idx()) * num_tris, idx(), GL_STATIC_DRAW);
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
-
-	if (util::reportGLError()) {
-		stream::cerr << __FUNCTION__ <<
-			" failed at glBindBuffer/glBufferData for ELEMENT_ARRAY_BUFFER\n";
-		return false;
-	}
 
 	return true;
 }
@@ -486,9 +486,6 @@ bool init_resources(
 	const unsigned argc,
 	const char* const * argv)
 {
-	if (parse_cli(argc, argv))
-		return false;
-
 #if DEBUG && PLATFORM_GL_KHR_debug
 	glDebugMessageCallbackKHR(debugProc, NULL);
 	glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS_KHR);

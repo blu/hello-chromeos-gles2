@@ -1233,25 +1233,19 @@ static int
 parse_cli(const int argc, char** const argv, struct Param& param)
 {
 	bool cli_err = false;
-	bool cli_app = false;
-
 	const unsigned prefix_len = strlen(util::arg_prefix);
 
 	for (int i = 1; i < argc && !cli_err; ++i) {
-		if (strncmp(argv[i], util::arg_prefix, prefix_len)) {
-			cli_err = !cli_app;
-			continue;
-		}
-
-		if (!strcmp(argv[i] + prefix_len, util::arg_app)) {
-			if (++i == argc)
+		if (!strncmp(argv[i], util::arg_prefix, prefix_len) &&
+			!strcmp(argv[i] + prefix_len, util::arg_app)) {
+			int tokens;
+			if (++i < argc && 0 <= (tokens = hook::parse_cli(argc - i, argv + i)))
+				i += tokens;
+			else
 				cli_err = true;
 
-			cli_app = true;
 			continue;
 		}
-
-		cli_app = false;
 
 		if (i + 1 < argc && !strcmp(argv[i] + prefix_len, arg_nframes)) {
 			if (1 != sscanf(argv[i + 1], "%u", &param.frames))

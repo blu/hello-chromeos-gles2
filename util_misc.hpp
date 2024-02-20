@@ -52,6 +52,7 @@ bool requires_depth();
 bool render_frame(GLuint primary_fbo);
 bool set_num_drawcalls(const unsigned);
 unsigned get_num_drawcalls();
+int parse_cli(const unsigned, const char* const*);
 
 } // namespace hook
 

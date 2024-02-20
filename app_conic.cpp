@@ -44,7 +44,7 @@ struct Vertex {
 
 namespace { // anonymous
 
-const char* arg_prefix    = "-";
+const char* arg_prefix    = "--";
 const char* arg_app       = "app";
 
 const char* arg_anim_step = "anim_step";
@@ -122,39 +122,28 @@ bool requires_depth()
 	return false;
 }
 
-static bool parse_cli(
+int parse_cli(
     const unsigned argc,
     const char* const* argv)
 {
-	bool cli_err = false;
-	const unsigned prefix_len = strlen(arg_prefix);
+	unsigned i = 0;
 
-	for (unsigned i = 1; i < argc && !cli_err; ++i) {
-		if (strncmp(argv[i], arg_prefix, prefix_len) ||
-			strcmp(argv[i] + prefix_len, arg_app)) {
-			continue;
+	if (i + 1 < argc && !strcmp(argv[i], arg_anim_step)) {
+		if (1 == sscanf(argv[i + 1], "%f", &g_angle_step) && 0.f < g_angle_step) {
+			return 1;
 		}
-
-		if (++i < argc) {
-			if (i + 1 < argc && !strcmp(argv[i], arg_anim_step)) {
-				if (1 == sscanf(argv[i + 1], "%f", &g_angle_step) && 0.f < g_angle_step) {
-					i += 1;
-					continue;
-				}
-			}
-		}
-
-		cli_err = true;
 	}
 
-	if (cli_err) {
-		stream::cerr << "app options:\n"
-			"\t" << arg_prefix << arg_app << " " << arg_anim_step <<
-			" <step>\t: use specified rotation step\n\n";
-	}
+	stream::cerr << "app options:\n"
+		"\t" << arg_prefix << arg_app << " " << arg_anim_step <<
+		" <step>\t: use specified rotation step\n\n";
 
-	return !cli_err;
+	return -1;
 }
+
+} // namespace
+
+namespace { // anonymous
 
 template < typename T >
 class generic_free
@@ -185,6 +174,10 @@ static bool check_context(
 #endif
 	return context_correct;
 }
+
+} // namespace
+
+namespace hook {
 
 bool deinit_resources()
 {
@@ -243,9 +236,6 @@ bool init_resources(
 	const unsigned argc,
 	const char* const * argv)
 {
-	if (!parse_cli(argc, argv))
-		return false;
-
 #if DEBUG && PLATFORM_GL_KHR_debug
 	glDebugMessageCallbackKHR(debugProc, NULL);
 	glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS_KHR);

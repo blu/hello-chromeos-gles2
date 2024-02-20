@@ -33,12 +33,12 @@
 #include "scoped.hpp"
 #include "stream.hpp"
 #include "vectsimd.hpp"
-#include "rendIndexedTrilist.hpp"
-#include "rendSkeleton.hpp"
 #include "util_tex.hpp"
 #include "util_misc.hpp"
 #include "pure_macro.hpp"
 
+#include "rendIndexedTrilist.hpp"
+#include "rendSkeleton.hpp"
 #include "rendVertAttr.hpp"
 
 using util::scoped_ptr;
@@ -84,7 +84,7 @@ struct Vertex {
 
 namespace { // anonymous
 
-const char arg_prefix[]     = "-";
+const char arg_prefix[]     = "--";
 const char arg_app[]        = "app";
 
 const char arg_normal[]     = "normal_map";
@@ -212,88 +212,74 @@ rend::ActiveAttrSemantics g_active_attr_semantics[PROG_COUNT];
 
 } // namespace
 
-bool hook::set_num_drawcalls(
+namespace hook {
+
+bool set_num_drawcalls(
 	const unsigned)
 {
 	return false;
 }
 
-unsigned hook::get_num_drawcalls()
+unsigned get_num_drawcalls()
 {
 	return 1;
 }
 
-bool hook::requires_depth()
+bool requires_depth()
 {
 	return true;
 }
 
-static bool parse_cli(
+int parse_cli(
 	const unsigned argc,
 	const char* const* argv)
 {
-	bool cli_err = false;
-	const unsigned prefix_len = strlen(arg_prefix);
+	unsigned i = 0;
 
-	for (unsigned i = 1; i < argc && !cli_err; ++i) {
-		if (strncmp(argv[i], arg_prefix, prefix_len) ||
-			strcmp(argv[i] + prefix_len, arg_app)) {
-			continue;
+	if (i + 3 < argc && !strcmp(argv[i], arg_normal)) {
+		if (1 == sscanf(argv[i + 2], "%u", &g_normal.w) &&
+			1 == sscanf(argv[i + 3], "%u", &g_normal.h)) {
+
+			g_normal.filename = argv[i + 1];
+			return 3;
 		}
+	}
+	else
+	if (i + 3 < argc && !strcmp(argv[i], arg_albedo)) {
+		if (1 == sscanf(argv[i + 2], "%u", &g_albedo.w) &&
+			1 == sscanf(argv[i + 3], "%u", &g_albedo.h)) {
 
-		if (++i < argc) {
-			if (i + 3 < argc && !strcmp(argv[i], arg_normal)) {
-				if (1 == sscanf(argv[i + 2], "%u", &g_normal.w) &&
-					1 == sscanf(argv[i + 3], "%u", &g_normal.h)) {
-
-					g_normal.filename = argv[i + 1];
-					i += 3;
-					continue;
-				}
-			}
-			else
-			if (i + 3 < argc && !strcmp(argv[i], arg_albedo)) {
-				if (1 == sscanf(argv[i + 2], "%u", &g_albedo.w) &&
-					1 == sscanf(argv[i + 3], "%u", &g_albedo.h)) {
-
-					g_albedo.filename = argv[i + 1];
-					i += 3;
-					continue;
-				}
-			}
-			else
-			if (i + 1 < argc && !strcmp(argv[i], arg_anim_step)) {
-				if (1 == sscanf(argv[i + 1], "%f", &g_anim_step) && 0.f < g_anim_step) {
-					i += 1;
-					continue;
-				}
-			}
-			else
-			if (i + 1 < argc && !strcmp(argv[i], arg_shadow_res)) {
-				if (1 == sscanf(argv[i + 1], "%u", &g_fbo_res) && 0 == (g_fbo_res & g_fbo_res - 1)) {
-					i += 1;
-					continue;
-				}
-			}
+			g_albedo.filename = argv[i + 1];
+			return 3;
 		}
-
-		cli_err = true;
+	}
+	else
+	if (i + 1 < argc && !strcmp(argv[i], arg_anim_step)) {
+		if (1 == sscanf(argv[i + 1], "%f", &g_anim_step) && 0.f < g_anim_step) {
+			return 1;
+		}
+	}
+	else
+	if (i + 1 < argc && !strcmp(argv[i], arg_shadow_res)) {
+		if (1 == sscanf(argv[i + 1], "%u", &g_fbo_res) && 0 == (g_fbo_res & g_fbo_res - 1)) {
+			return 1;
+		}
 	}
 
-	if (cli_err) {
-		stream::cerr << "app options:\n"
-			"\t" << arg_prefix << arg_app << " " << arg_normal <<
-			" <filename> <width> <height>\t: use specified raw file and dimensions as source of normal map\n"
-			"\t" << arg_prefix << arg_app << " " << arg_albedo <<
-			" <filename> <width> <height>\t: use specified raw file and dimensions as source of albedo map\n"
-			"\t" << arg_prefix << arg_app << " " << arg_anim_step <<
-			" <step>\t\t\t\t: use specified animation step; entire animation is 1.0\n"
-			"\t" << arg_prefix << arg_app << " " << arg_shadow_res <<
-			" <pot>\t\t\t\t: use specified shadow buffer resolution (POT); default is " << fbo_default_res << "\n\n";
-	}
+	stream::cerr << "app options:\n"
+		"\t" << arg_prefix << arg_app << " " << arg_normal <<
+		" <filename> <width> <height>\t: use specified raw file and dimensions as source of normal map\n"
+		"\t" << arg_prefix << arg_app << " " << arg_albedo <<
+		" <filename> <width> <height>\t: use specified raw file and dimensions as source of albedo map\n"
+		"\t" << arg_prefix << arg_app << " " << arg_anim_step <<
+		" <step>\t\t\t\t: use specified animation step; entire animation is 1.0\n"
+		"\t" << arg_prefix << arg_app << " " << arg_shadow_res <<
+		" <pot>\t\t\t\t: use specified shadow buffer resolution (POT); default is " << fbo_default_res << "\n\n";
 
-	return !cli_err;
+	return -1;
 }
+
+} // namespace
 
 namespace { // anonymous
 
@@ -433,9 +419,6 @@ hook::init_resources(
 	const unsigned argc,
 	const char* const * argv)
 {
-	if (!parse_cli(argc, argv))
-		return false;
-
 #if DEBUG && PLATFORM_GL_KHR_debug
 	glDebugMessageCallbackKHR(debugProc, NULL);
 	glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS_KHR);
